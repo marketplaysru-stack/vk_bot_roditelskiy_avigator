@@ -138,7 +138,7 @@ def get_group(name: str) -> Optional[Dict]:
 def get_all_groups() -> List[str]:
     return list(load_groups().keys())
 
-def load_default_group_from_env():
+# load_default_group_from_env():
     token = os.getenv("VK_TOKEN_AI")
     group_id_str = os.getenv("GROUP_ID_AI")
     if token and group_id_str:
