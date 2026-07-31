@@ -2,7 +2,7 @@
 import logging
 from typing import Optional
 from .base import ImageGenerator
-from .gemini import GeminiGenerator
+from .genapi import GenAPIGenerator          # Импортируем GenAPI
 from .pollinations import PollinationsGenerator
 from .picsum import PicsumGenerator
 from .banner import BannerGenerator
@@ -12,18 +12,16 @@ logger = logging.getLogger(__name__)
 class MultiImageGenerator(ImageGenerator):
     def __init__(self):
         self.generators = [
-            ("Gemini", GeminiGenerator(timeout=120)),
+            ("GenAPI", GenAPIGenerator(timeout=120)),
             ("Pollinations", PollinationsGenerator(timeout=90)),
             ("Picsum", PicsumGenerator()),
         ]
         self.banner_generator = BannerGenerator()
 
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
-        # Определяем категорию для баннера (если понадобится)
         category = self._detect_category(prompt)
 
-        # Для анонсов можно сразу использовать баннер (или тоже попробовать Gemini)
-        # Оставим баннер для анонсов, чтобы не ждать долго
+        # Для анонсов – сразу баннер (или пробуем GenAPI, но оставим баннер для скорости)
         if is_announce:
             logger.info("Генерация баннера для анонса")
             try:
@@ -35,7 +33,7 @@ class MultiImageGenerator(ImageGenerator):
                 )
             except Exception as e:
                 logger.error(f"Ошибка баннера для анонса: {e}")
-                # Если баннер не сработал, пробуем обычную генерацию
+                # Если баннер не сработал, попробуем обычную генерацию
                 pass
 
         # Для постов – пробуем генераторы по очереди
@@ -99,7 +97,6 @@ class MultiImageGenerator(ImageGenerator):
         if len(topic) < 5:
             topic = "Технологии и инновации"
 
-        # Детальный промпт на русском (Gemini понимает русский)
         return (
             f"Создай профессиональную иллюстрацию на тему: {topic}. "
             f"Включи элементы: графики, иконки, шестерёнки, схемы. "
