@@ -84,7 +84,6 @@ class CommandHandler:
             return f"❌ Ошибка генерации: {e}"
 
     def _publish(self, group_name: str, topic: str) -> str:
-        # Логируем состояние конфига для анонса
         logger.info(f"VK_USER_ID: {config.vk_user_id}, VK_TOKEN_USER: {'*' * len(config.vk_token_user) if config.vk_token_user else 'empty'}")
 
         group = self.groups.get(group_name)
@@ -92,28 +91,22 @@ class CommandHandler:
             return f"❌ Группа '{group_name}' не найдена. Используйте /list"
 
         try:
-            # 1) Генерация текста
+            # Генерация текста
             logger.info(f"Генерация текста для темы: {topic}")
             text = text_manager.generate(topic)
             if not text:
                 return "❌ Не удалось сгенерировать текст"
             logger.info(f"Текст сгенерирован (длина {len(text)})")
 
-            # 2) Генерация баннера для поста (без кнопки, но с темой)
-            logger.info(f"Генерация баннера для поста")
-            image_bytes = multi_image.generate(
-                topic,
-                is_announce=False,
-                title=topic[:50],
-                subtitle="Подробности в нашем посте",
-                cta="ЧИТАТЬ"
-            )
+            # Генерация картинки через multi_image
+            logger.info(f"Генерация картинки через multi_image")
+            image_bytes = multi_image.generate(topic, is_announce=False)
             if image_bytes:
-                logger.info(f"Баннер для поста получен, размер {len(image_bytes)} байт")
+                logger.info(f"Картинка получена, размер {len(image_bytes)} байт")
             else:
-                logger.warning("Не удалось сгенерировать баннер для поста")
+                logger.warning("Не удалось получить картинку")
 
-            # 3) Публикация в группу
+            # Публикация в группу
             post = Post(text=text, image_bytes=image_bytes)
             publisher = VKPublisher(group.token)
             result = publisher.publish(post, group)
@@ -123,18 +116,16 @@ class CommandHandler:
 
             group_link = f"https://vk.com/club{abs(group.group_id)}"
 
-            # 4) Анонс на личную страницу (с баннером с кнопкой)
+            # Анонс на личную страницу
             if config.vk_user_id and config.vk_token_user:
                 logger.info("Начинаем создание анонса на личную страницу")
                 try:
                     announce_text = text_manager.generate_announce(topic, group_name)
-
-                    # Генерируем баннер для анонса (с кнопкой подписки)
                     announce_image = multi_image.generate(
                         f"Анонс: {topic} — подпишись на {group_name}",
                         is_announce=True,
                         title="🔥 НОВОСТЬ",
-                        subtitle=topic[:60] if len(topic) > 60 else topic,
+                        subtitle=topic[:60],
                         cta="ПОДПИСЫВАЙСЯ"
                     )
                     user_publisher = VKPublisher(config.vk_token_user)
