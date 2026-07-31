@@ -35,7 +35,6 @@ class MultiImageGenerator(ImageGenerator):
                 logger.error(f"Ошибка создания баннера для анонса: {e}")
                 return self._create_fallback_image()
 
-        # Для постов – сначала пытаемся получить картинку от внешних генераторов
         detailed_prompt = self._build_detailed_prompt(prompt)
         logger.info(f"Промпт для генерации: {detailed_prompt[:200]}...")
 
@@ -51,7 +50,6 @@ class MultiImageGenerator(ImageGenerator):
             except Exception as e:
                 logger.error(f"{name} ошибка: {e}")
 
-        # Если все API не сработали – создаём баннер-заглушку для поста
         logger.warning("Все внешние генераторы не сработали, создаём баннер-заглушку")
         try:
             return self.banner_generator.create_banner(
@@ -64,12 +62,38 @@ class MultiImageGenerator(ImageGenerator):
             return self._create_fallback_image()
 
     def _build_detailed_prompt(self, raw_prompt: str) -> str:
-        # ... (без изменений, можно оставить как было)
-        # Но для краткости оставим упрощённую версию
-        return f"Professional illustration about {raw_prompt}. Include relevant icons and graphics. Style: modern, flat design, vibrant colors. Vertical 9:16, no text, no people."
+        # Упрощённая версия – можно расширить
+        topic = raw_prompt
+        if "Анонс" in topic:
+            if ":" in topic:
+                parts = topic.split(":", 1)
+                topic = parts[1].strip() if len(parts) > 1 else parts[0].strip()
+            if "—" in topic:
+                topic = topic.split("—")[0].strip()
+        if len(topic) < 5:
+            topic = "технологии и инновации"
+        return f"Professional illustration about {topic}. Include relevant icons and graphics. Style: modern, flat design, vibrant colors. Vertical 9:16, no text, no people."
 
     def _create_fallback_image(self) -> bytes:
-        # ... (заглушка)
-        pass
+        try:
+            width, height = 800, 600
+            img = Image.new('RGB', (width, height), color='#0a0a2e')
+            draw = ImageDraw.Draw(img)
+            try:
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 60)
+            except:
+                font = ImageFont.load_default()
+            text = "AI Навигатор"
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            x = (width - text_width) // 2
+            y = (height - text_height) // 2
+            draw.text((x, y), text, fill='#FFD700', font=font)
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            return buf.getvalue()
+        except Exception as e:
+            return b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9c\x63\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xdc\xccY\xe7\x00\x00\x00\x00IEND\xaeB`\x82'
 
 multi_image = MultiImageGenerator()
