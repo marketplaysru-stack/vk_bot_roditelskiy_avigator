@@ -2,6 +2,10 @@
 import logging
 from typing import Optional
 from .base import ImageGenerator
+from .agnes import AgnesImageGenerator
+from .huggingface import HuggingFaceGenerator
+from .pollinations import PollinationsGenerator
+from .picsum import PicsumGenerator
 from .banner import BannerGenerator
 from PIL import Image, ImageDraw, ImageFont
 import io
@@ -10,39 +14,98 @@ logger = logging.getLogger(__name__)
 
 class MultiImageGenerator(ImageGenerator):
     def __init__(self):
+        # Генераторы с увеличенными таймаутами
+        self.generators = [
+            ("Agnes", AgnesImageGenerator(timeout=120)),      # ПРИОРИТЕТ №1
+            ("HuggingFace", HuggingFaceGenerator(timeout=120)),
+            ("Pollinations", PollinationsGenerator(timeout=60)),
+            ("Picsum", PicsumGenerator()),
+        ]
         self.banner_generator = BannerGenerator()
 
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
-        # Всегда используем баннер (с текстом для анонсов, без для постов)
-        try:
-            if is_announce:
-                logger.info("Генерация баннера для анонса")
-                return self.banner_generator.create_banner(title=title, subtitle=subtitle, cta=cta)
-            else:
-                # Для постов – баннер без кнопки, но с темой в заголовке
-                logger.info("Генерация баннера для поста")
-                # Извлекаем тему
-                topic = prompt
-                if "Анонс" in topic:
-                    if ":" in topic:
-                        parts = topic.split(":", 1)
-                        if len(parts) > 1:
-                            topic = parts[1].strip()
-                        else:
-                            topic = parts[0].strip()
-                    if "—" in topic:
-                        topic = topic.split("—")[0].strip()
-                if len(topic) < 5:
-                    topic = "Технологии и инновации"
-                # Создаём баннер с заголовком = теме, подзаголовок = "Читайте в нашем посте"
+        # Для анонсов можно попробовать сначала Agnes, но чтобы не ждать 2 минуты,
+        # оставляем баннер (локально) – он быстрый и стабильный.
+        # Однако если вы хотите, чтобы анонсы тоже генерировались через Agnes,
+        # можно убрать условие is_announce и всегда пробовать генераторы.
+        # Пока оставим баннер для анонсов, но для постов – Agnes в приоритете.
+        if is_announce:
+            logger.info("Генерация баннера для анонса (локально)")
+            try:
+                category = self._detect_category(prompt)
                 return self.banner_generator.create_banner(
-                    title=topic[:50],
-                    subtitle="Подробности в нашем посте",
-                    cta="ЧИТАТЬ"
+                    title=title or "🔥 НОВОСТЬ",
+                    subtitle=subtitle or prompt[:60],
+                    cta=cta or "ПОДПИСЫВАЙСЯ",
+                    category=category
                 )
+            except Exception as e:
+                logger.error(f"Ошибка создания баннера для анонса: {e}")
+                return self._create_fallback_image()
+
+        # Для постов – ПЕРВАЯ ПОПЫТКА ЧЕРЕЗ AGNES
+        detailed_prompt = self._build_detailed_prompt(prompt)
+        logger.info(f"Промпт для генерации: {detailed_prompt[:200]}...")
+
+        for name, gen in self.generators:
+            try:
+                logger.info(f"Попытка генерации через {name} с таймаутом {getattr(gen, 'timeout', 'N/A')} сек")
+                result = gen.generate(detailed_prompt)
+                if result and isinstance(result, bytes) and len(result) > 0:
+                    logger.info(f"✅ Успешно сгенерировано через {name}, размер {len(result)} байт")
+                    return result
+                else:
+                    logger.warning(f"{name} вернул пустой результат")
+            except Exception as e:
+                logger.error(f"{name} ошибка: {e}")
+
+        # Если все API не сработали – создаём баннер-заглушку для поста
+        logger.warning("Все внешние генераторы не сработали, создаём баннер-заглушку")
+        try:
+            return self.banner_generator.create_banner(
+                title=prompt[:50],
+                subtitle="Подробности в посте",
+                cta="ЧИТАТЬ",
+                category=self._detect_category(prompt)
+            )
         except Exception as e:
-            logger.error(f"Ошибка генерации баннера: {e}")
+            logger.error(f"Ошибка создания баннера-заглушки: {e}")
             return self._create_fallback_image()
+
+    def _detect_category(self, prompt: str) -> str:
+        topic = prompt.lower()
+        if any(w in topic for w in ['строитель', 'архитектур', 'здание', 'ремонт', 'стройка', 'bim', 'кран', 'чертёж']):
+            return "construction"
+        elif any(w in topic for w in ['бизнес', 'предприним', 'стартап', 'инвест', 'финанс']):
+            return "business"
+        elif any(w in topic for w in ['ии', 'нейросет', 'ai', 'машинн', 'интеллект', 'чатгпт']):
+            return "ai"
+        elif any(w in topic for w in ['образован', 'учёб', 'школ', 'университет', 'курс', 'лекция']):
+            return "education"
+        else:
+            return "general"
+
+    def _build_detailed_prompt(self, raw_prompt: str) -> str:
+        topic = raw_prompt
+        if "Анонс" in topic:
+            if ":" in topic:
+                parts = topic.split(":", 1)
+                topic = parts[1].strip() if len(parts) > 1 else parts[0].strip()
+            if "—" in topic:
+                topic = topic.split("—")[0].strip()
+        if len(topic) < 5:
+            topic = "технологии и инновации"
+
+        category = self._detect_category(topic)
+
+        templates = {
+            "construction": f"Professional illustration about {topic}. Include construction site, cranes, blueprints, hard hats, buildings, BIM model. Style: flat design, modern architecture, vibrant colors: blue, orange, white. Vertical 9:16, no text, no people.",
+            "business": f"Corporate illustration about {topic}. Include growth charts, graphs, gears, handshake, dollar signs. Style: clean, modern, flat vector. Colors: navy, gold, white, teal. Vertical 9:16, no text, no people.",
+            "ai": f"Futuristic illustration about {topic}. Include neural networks, AI chips, data streams, glowing circuits. Style: cyberpunk, neon, high-tech. Colors: purple, blue, cyan, gold. Vertical 9:16, no text, no people.",
+            "education": f"Educational illustration about {topic}. Include books, graduation cap, light bulb, globe, pencils. Style: colorful, flat vector, playful. Colors: blue, yellow, green, white. Vertical 9:16, no text, no people.",
+            "general": f"Creative illustration about {topic}. Include abstract icons, geometric shapes. Style: modern, clean, flat design. Colors: blue, purple, orange, white. Vertical 9:16, no text, no people."
+        }
+        return templates.get(category, templates["general"])
 
     def _create_fallback_image(self) -> bytes:
         try:
