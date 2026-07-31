@@ -1,107 +1,51 @@
+#!/usr/bin/env python3
 """
-Главная точка входа проекта.
+bot.py – Telegram-бот для управления публикациями в VK
+Заменяет консольную версию. Запускает long polling для приёма команд.
 """
 
+import time
+import logging
+from config import config
 from core.logger import get_logger
-from core.groups import groups
-
-from generators.text.manager import text_manager
-from generators.image.multi import multi_image
-
-from publishers.vk.publisher import VKPublisher
-
+from services.telegram import TelegramClient
+from handlers.command_handler import CommandHandler
 
 logger = get_logger("BOT")
 
-
 def main():
+    logger.info("🚀 Запуск Telegram-бота")
 
-    logger.info("Запуск проекта...")
-
-    # ----------------------------------------
-    # Выбираем группу
-    # ----------------------------------------
-
-    group = groups.first()
-
-    if group is None:
-
-        logger.error("Нет доступных групп.")
-
+    if not config.telegram_token:
+        logger.error("TELEGRAM_TOKEN не задан в .env")
         return
 
-    logger.info(
-        "Выбрана группа: %s",
-        group.name,
-    )
+    client = TelegramClient(config.telegram_token)
+    handler = CommandHandler()
 
-    # ----------------------------------------
-    # Тема
-    # ----------------------------------------
+    last_update_id = 0
 
-    topic = input(
-        "\nВведите тему публикации: "
-    ).strip()
-
-    if not topic:
-
-        logger.error("Тема не указана.")
-
-        return
-
-    # ----------------------------------------
-    # Генерация текста
-    # ----------------------------------------
-
-    logger.info("Генерация текста...")
-
-    post = text_manager.generate(topic)
-
-    # ----------------------------------------
-    # Генерация изображения
-    # ----------------------------------------
-
-    logger.info("Генерация изображения...")
-
-    image = multi_image.generate(topic)
-
-    post.add_image(str(image))
-
-    # ----------------------------------------
-    # Публикация
-    # ----------------------------------------
-
-    logger.info("Публикация...")
-
-    publisher = VKPublisher(group.token)
-
-    result = publisher.publish(
-        post,
-        group,
-    )
-
-    # ----------------------------------------
-    # Результат
-    # ----------------------------------------
-
-    if result.ok:
-
-        logger.info(
-            "Пост опубликован."
-        )
-
-        logger.info(
-            "ID поста: %s",
-            result.post_id,
-        )
-
-    else:
-
-        logger.error(
-            result.message
-        )
-
+    while True:
+        try:
+            updates = client.get_updates(offset=last_update_id + 1)
+            if updates:
+                logger.info(f"📩 Получено {len(updates)} обновлений")
+                for update in updates:
+                    last_update_id = update["update_id"]
+                    if "message" in update:
+                        msg = update["message"]
+                        chat_id = msg["chat"]["id"]
+                        if "text" in msg:
+                            text = msg["text"].strip()
+                            if text:
+                                response = handler.handle(chat_id, text)
+                                if response:
+                                    client.send_message(chat_id, response)
+            else:
+                time.sleep(1)
+        except Exception as e:
+            logger.error(f"Ошибка в цикле: {e}")
+            time.sleep(5)
 
 if __name__ == "__main__":
-
     main()
