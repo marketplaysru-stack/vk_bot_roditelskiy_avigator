@@ -2,6 +2,8 @@
 import logging
 from typing import Optional
 from .base import ImageGenerator
+from .gemini import GeminiGenerator
+from .pixazo import PixazoGenerator
 from .pollinations import PollinationsGenerator
 from .picsum import PicsumGenerator
 from .banner import BannerGenerator
@@ -12,57 +14,62 @@ logger = logging.getLogger(__name__)
 
 class MultiImageGenerator(ImageGenerator):
     def __init__(self):
-        # Основной генератор – Pollinations (бесплатный, без ключей)
+        # Приоритет: Gemini → Pixazo → Pollinations → Picsum
         self.generators = [
+            ("Gemini", GeminiGenerator(timeout=120)),
+            ("Pixazo", PixazoGenerator(timeout=90)),
             ("Pollinations", PollinationsGenerator(timeout=90)),
-            ("Picsum", PicsumGenerator()),   # резерв
+            ("Picsum", PicsumGenerator()),
         ]
         self.banner_generator = BannerGenerator()
 
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
-        # Для постов и анонсов используем одинаковую логику: сначала пытаемся получить картинку от внешнего генератора
+        # Для анонсов используем баннер с наложением текста на картинку
+        if is_announce:
+            # Сначала генерируем картинку без текста
+            image_bytes = self._generate_image(prompt)
+            if image_bytes:
+                try:
+                    logger.info("Накладываем текст на картинку для анонса")
+                    return self.banner_generator.create_banner_from_image(
+                        image_bytes,
+                        title=title or "🔥 НОВОСТЬ",
+                        subtitle=subtitle or prompt[:60],
+                        cta=cta or "ПОДПИСЫВАЙСЯ"
+                    )
+                except Exception as e:
+                    logger.error(f"Ошибка наложения текста: {e}")
+                    return image_bytes
+            else:
+                logger.warning("Не удалось получить картинку для анонса, создаём баннер-заглушку")
+                return self.banner_generator.create_banner(
+                    title=title or "🔥 НОВОСТЬ",
+                    subtitle=subtitle or prompt[:60],
+                    cta=cta or "ПОДПИСЫВАЙСЯ",
+                    category="general"
+                )
+
+        # Для постов — просто возвращаем картинку
+        return self._generate_image(prompt)
+
+    def _generate_image(self, prompt: str) -> Optional[bytes]:
         detailed_prompt = self._build_detailed_prompt(prompt)
         logger.info(f"Промпт для генерации: {detailed_prompt[:200]}...")
 
-        image_bytes = None
         for name, gen in self.generators:
             try:
                 logger.info(f"Попытка генерации через {name} с таймаутом {getattr(gen, 'timeout', 'N/A')} сек")
                 result = gen.generate(detailed_prompt)
                 if result and isinstance(result, bytes) and len(result) > 0:
                     logger.info(f"✅ Успешно сгенерировано через {name}, размер {len(result)} байт")
-                    image_bytes = result
-                    break
+                    return result
                 else:
                     logger.warning(f"{name} вернул пустой результат")
             except Exception as e:
                 logger.error(f"{name} ошибка: {e}")
 
-        # Если внешние генераторы не дали результат – создаём простую заглушку
-        if not image_bytes:
-            logger.warning("Не удалось получить картинку, создаём заглушку")
-            image_bytes = self._create_fallback_image()
-
-        # Если это анонс – накладываем текст поверх картинки
-        if is_announce:
-            try:
-                logger.info("Накладываем текст на картинку для анонса")
-                return self.banner_generator.create_banner_from_image(
-                    image_bytes,
-                    title=title or "🔥 НОВОСТЬ",
-                    subtitle=subtitle or prompt[:60],
-                    cta=cta or "ПОДПИСЫВАЙСЯ"
-                )
-            except Exception as e:
-                logger.error(f"Ошибка наложения текста: {e}")
-                return image_bytes  # возвращаем картинку без текста
-
-        # Для поста – возвращаем картинку как есть
-        return image_bytes
-
-    def _detect_category(self, prompt: str) -> str:
-        # категория пока не используется, оставляем для совместимости
-        return "general"
+        logger.warning("Не удалось получить картинку ни через один генератор")
+        return None
 
     def _build_detailed_prompt(self, raw_prompt: str) -> str:
         topic = raw_prompt
@@ -75,7 +82,6 @@ class MultiImageGenerator(ImageGenerator):
         if len(topic) < 5:
             topic = "технологии и инновации"
 
-        # Определяем категорию для более точного промпта
         keywords = topic.lower()
         if any(w in keywords for w in ['строитель', 'архитектур', 'здание', 'ремонт', 'стройка', 'bim', 'кран', 'чертёж']):
             category = "construction"
