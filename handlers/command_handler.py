@@ -9,6 +9,7 @@ from generators.image.multi import multi_image
 from publishers.vk.publisher import VKPublisher
 from models.post import Post
 from core.logger import get_logger
+from config import config
 
 logger = get_logger("command_handler")
 
@@ -25,6 +26,9 @@ class CommandHandler:
 
         if text == "/list":
             return self._list_groups()
+
+        if text == "/rss":
+            return self._show_rss()
 
         match = re.match(r'/post\s+"([^"]+)"\s+(.+)', text)
         if match:
@@ -44,6 +48,7 @@ class CommandHandler:
             "🤖 AI Навигатор – управляющий бот\n\n"
             "Доступные команды:\n"
             "/list – показать все группы\n"
+            "/rss – показать RSS-источники\n"
             "/generate <тема> – сгенерировать пост без публикации\n"
             "/post \"<группа>\" <тема> – сгенерировать и опубликовать\n\n"
             "Пример:\n"
@@ -57,6 +62,16 @@ class CommandHandler:
         lines = ["📋 Группы:"]
         for g in all_groups:
             lines.append(f"• {g.name} (ID: {g.group_id})")
+        return "\n".join(lines)
+
+    def _show_rss(self) -> str:
+        if not config.rss_sources:
+            return "📭 Нет настроенных RSS-источников"
+        lines = ["📡 RSS-источники:"]
+        for src in config.rss_sources:
+            url = src.get("url", "нет URL")
+            target = src.get("target", "не указан")
+            lines.append(f"• {target} → {url}")
         return "\n".join(lines)
 
     def _generate_only(self, topic: str) -> str:
@@ -81,7 +96,7 @@ class CommandHandler:
                 return "❌ Не удалось сгенерировать текст"
             logger.info(f"Текст сгенерирован (длина {len(text)})")
 
-            # 2) Генерация картинки (байты)
+            # 2) Генерация картинки
             logger.info(f"Генерация картинки для темы: {topic}")
             image_bytes = multi_image.generate(topic)
             if image_bytes:
@@ -89,17 +104,34 @@ class CommandHandler:
             else:
                 logger.warning("Генератор не вернул байты картинки")
 
-            # 3) Создаём пост с байтами картинки (image_url не используется)
+            # 3) Публикация в группу
             post = Post(text=text, image_bytes=image_bytes)
-
-            # 4) Публикация напрямую через VKPublisher (без imgbb)
             publisher = VKPublisher(group.token)
             result = publisher.publish(post, group)
 
-            if result.ok:
-                return f"✅ Пост опубликован в '{group_name}' (id: {result.post_id})"
-            else:
+            if not result.ok:
                 return f"❌ Ошибка публикации: {result.message}"
+
+            group_link = f"https://vk.com/club{abs(group.group_id)}"
+
+            # 4) Анонс на личную страницу
+            if config.vk_user_id and config.vk_token_user:
+                try:
+                    announce_text = text_manager.generate_announce(topic, group_name)
+                    announce_image = multi_image.generate(f"Анонс: {topic} — подпишись на {group_name}")
+                    user_publisher = VKPublisher(config.vk_token_user)
+                    user_result = user_publisher.publish_to_user(announce_text, announce_image, group_link)
+                    if user_result.ok:
+                        logger.info(f"Анонс на личную страницу опубликован (id: {user_result.post_id})")
+                    else:
+                        logger.error(f"Ошибка публикации анонса: {user_result.message}")
+                except Exception as e:
+                    logger.error(f"Ошибка при создании анонса: {e}")
+            else:
+                logger.info("Анонс на личную страницу не настроен (нет VK_USER_ID или VK_TOKEN_USER)")
+
+            return f"✅ Пост опубликован в '{group_name}' (id: {result.post_id})"
+
         except Exception as e:
             logger.error(f"Ошибка публикации: {e}")
             return f"❌ Ошибка: {e}"
