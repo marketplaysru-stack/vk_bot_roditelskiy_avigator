@@ -2,8 +2,7 @@
 import logging
 from typing import Optional
 from .base import ImageGenerator
-from .deepai import DeepAIGenerator        # Импорт DeepAI
-from .modelslab import ModelsLabGenerator
+from .deepai import DeepAIGenerator          # DeepAI – основной
 from .agnes import AgnesImageGenerator
 from .huggingface import HuggingFaceGenerator
 from .pollinations import PollinationsGenerator
@@ -16,10 +15,9 @@ logger = logging.getLogger(__name__)
 
 class MultiImageGenerator(ImageGenerator):
     def __init__(self):
-        # Приоритет: DeepAI → ModelsLab → Agnes → Pollinations → Picsum
+        # Приоритет: DeepAI → Agnes → Pollinations → Picsum
         self.generators = [
-            ("DeepAI", DeepAIGenerator(timeout=120)),         # ПРИОРИТЕТ №1
-            ("ModelsLab", ModelsLabGenerator(timeout=120)),
+            ("DeepAI", DeepAIGenerator(timeout=120)),
             ("Agnes", AgnesImageGenerator(timeout=120)),
             ("Pollinations", PollinationsGenerator(timeout=60)),
             ("Picsum", PicsumGenerator()),
@@ -29,7 +27,7 @@ class MultiImageGenerator(ImageGenerator):
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
         category = self._detect_category(prompt)
 
-        # Для анонсов – сразу баннер (локально)
+        # Для анонсов – баннер локально
         if is_announce:
             logger.info("Генерация баннера для анонса")
             try:
@@ -43,7 +41,7 @@ class MultiImageGenerator(ImageGenerator):
                 logger.error(f"Ошибка создания баннера для анонса: {e}")
                 return self._create_fallback_image()
 
-        # Для постов – сначала пробуем внешние генераторы
+        # Для постов – пробуем внешние генераторы
         detailed_prompt = self._build_detailed_prompt(prompt)
         logger.info(f"Промпт для генерации: {detailed_prompt[:200]}...")
 
@@ -59,7 +57,7 @@ class MultiImageGenerator(ImageGenerator):
             except Exception as e:
                 logger.error(f"{name} ошибка: {e}")
 
-        # Если все API не сработали – создаём баннер-заглушку
+        # Если все API не сработали – баннер-заглушка
         logger.warning("Все внешние генераторы не сработали, создаём баннер-заглушку")
         try:
             return self.banner_generator.create_banner(
