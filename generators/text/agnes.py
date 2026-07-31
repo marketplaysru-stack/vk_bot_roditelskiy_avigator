@@ -1,68 +1,26 @@
-"""
-generators/text/agnes.py
----------------------------------------
-Генерация текста через Agnes API.
-"""
+import os
+import requests
+from .base import TextGenerator
+from config import config
 
-from __future__ import annotations
+class AgnesGenerator(TextGenerator):
+    def __init__(self):
+        self.api_key = config.agnes_api_key
+        self.timeout = 60
+        self.base_url = "https://api.agnes.ai/v1/chat/completions"
 
-from config import settings
-from core.http import http
-
-from models.post import Post
-
-from generators.text.base import BaseTextGenerator
-
-
-class AgnesGenerator(BaseTextGenerator):
-
-    name = "agnes"
-
-    API_URL = "https://api.agnes.ai/v1/chat/completions"
-
-    def generate(
-        self,
-        topic: str,
-        **kwargs,
-    ) -> Post:
-
-        self.before_generate(topic)
-
-        prompt = kwargs.get(
-            "prompt",
-            f"Напиши интересный пост на тему:\n\n{topic}"
-        )
-
-        payload = {
-            "model": "agnes-4o-mini",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
-            "temperature": 0.8,
-        }
-
+    def generate(self, topic: str) -> str:
+        if not self.api_key:
+            raise ValueError("AGNES_API_KEY не задан")
         headers = {
-            "Authorization": f"Bearer {settings.AGNES_API_KEY}",
-            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
         }
-
-        data = http.post_json(
-            self.API_URL,
-            json=payload,
-            headers=headers,
-        )
-
-        text = (
-            data["choices"][0]["message"]["content"]
-            .strip()
-        )
-
-        post = Post(
-            title=topic,
-            text=text,
-        )
-
-        return self.after_generate(post)
+        data = {
+            "model": "agnes-v1",
+            "messages": [{"role": "user", "content": f"Напиши пост на тему: {topic}"}],
+            "max_tokens": 300
+        }
+        resp = requests.post(self.base_url, headers=headers, json=data, timeout=self.timeout)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
