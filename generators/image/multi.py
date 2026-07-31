@@ -3,6 +3,8 @@ import logging
 from typing import Optional
 from .base import ImageGenerator
 from .banner import BannerGenerator
+from PIL import Image, ImageDraw, ImageFont
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -11,15 +13,15 @@ class MultiImageGenerator(ImageGenerator):
         self.banner_generator = BannerGenerator()
 
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
-        # Всегда создаём баннер через BannerGenerator
-        logger.info("Генерация баннера для публикации")
+        # Всегда используем баннер (с текстом для анонсов, без для постов)
         try:
-            # Если это анонс, используем переданные title, subtitle, cta
             if is_announce:
+                logger.info("Генерация баннера для анонса")
                 return self.banner_generator.create_banner(title=title, subtitle=subtitle, cta=cta)
             else:
-                # Для поста генерируем баннер с темой как заголовком
-                # Извлекаем тему из prompt
+                # Для постов – баннер без кнопки, но с темой в заголовке
+                logger.info("Генерация баннера для поста")
+                # Извлекаем тему
                 topic = prompt
                 if "Анонс" in topic:
                     if ":" in topic:
@@ -32,20 +34,17 @@ class MultiImageGenerator(ImageGenerator):
                         topic = topic.split("—")[0].strip()
                 if len(topic) < 5:
                     topic = "Технологии и инновации"
-                # Создаём баннер для поста
+                # Создаём баннер с заголовком = теме, подзаголовок = "Читайте в нашем посте"
                 return self.banner_generator.create_banner(
                     title=topic[:50],
-                    subtitle="Подробности в посте",
+                    subtitle="Подробности в нашем посте",
                     cta="ЧИТАТЬ"
                 )
         except Exception as e:
-            logger.error(f"Ошибка создания баннера: {e}")
+            logger.error(f"Ошибка генерации баннера: {e}")
             return self._create_fallback_image()
 
     def _create_fallback_image(self) -> bytes:
-        # простая заглушка, если баннер не создался
-        from PIL import Image, ImageDraw, ImageFont
-        import io
         try:
             width, height = 800, 600
             img = Image.new('RGB', (width, height), color='#0a0a2e')
@@ -64,7 +63,7 @@ class MultiImageGenerator(ImageGenerator):
             buf = io.BytesIO()
             img.save(buf, format='PNG')
             return buf.getvalue()
-        except:
+        except Exception as e:
             return b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9c\x63\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xdc\xccY\xe7\x00\x00\x00\x00IEND\xaeB`\x82'
 
 multi_image = MultiImageGenerator()
