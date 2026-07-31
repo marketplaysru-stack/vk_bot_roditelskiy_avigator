@@ -92,7 +92,7 @@ class CommandHandler:
             # 3) Создаём пост с байтами картинки (image_url не используется)
             post = Post(text=text, image_bytes=image_bytes)
 
-            # 4) Публикация
+            # 4) Публикация напрямую через VKPublisher (без imgbb)
             publisher = VKPublisher(group.token)
             result = publisher.publish(post, group)
 
