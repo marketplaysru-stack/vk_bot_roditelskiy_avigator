@@ -2,7 +2,7 @@
 import logging
 from typing import Optional
 from .base import ImageGenerator
-from .genapi import GenAPIGenerator          # Импорт GenAPI
+from .genapi import GenAPIGenerator
 from .pollinations import PollinationsGenerator
 from .picsum import PicsumGenerator
 from .banner import BannerGenerator
@@ -21,7 +21,7 @@ class MultiImageGenerator(ImageGenerator):
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
         category = self._detect_category(prompt)
 
-        # Для анонсов – сразу баннер (можно оставить баннер, чтобы не ждать)
+        # Для анонсов – сразу баннер (чтобы не ждать генерацию)
         if is_announce:
             logger.info("Генерация баннера для анонса")
             try:
@@ -36,11 +36,21 @@ class MultiImageGenerator(ImageGenerator):
                 # Если баннер не сработал, пробуем обычную генерацию (но не для анонса)
 
         # Для постов – пробуем генераторы по очереди
-        detailed_prompt = self._build_detailed_prompt(prompt)
+        detailed_prompt = self._build_detailed_prompt(prompt, category)
         for name, gen in self.generators:
             try:
                 logger.info(f"Попытка генерации через {name}")
-                result = gen.generate(detailed_prompt)
+                # Для GenAPI передаём дополнительные параметры
+                if name == "GenAPI":
+                    # Параметры для GenAPI (можно настроить под свои нужды)
+                    result = gen.generate(
+                        detailed_prompt,
+                        model="medium",
+                        aspect_ratio="9:16",
+                        creativity="high"
+                    )
+                else:
+                    result = gen.generate(detailed_prompt)
                 if result and isinstance(result, bytes) and len(result) > 0:
                     logger.info(f"✅ Успешно через {name}, размер {len(result)} байт")
                     # Если это анонс (и мы не создали баннер) – накладываем текст
@@ -85,7 +95,7 @@ class MultiImageGenerator(ImageGenerator):
         else:
             return "general"
 
-    def _build_detailed_prompt(self, raw_prompt: str) -> str:
+    def _build_detailed_prompt(self, raw_prompt: str, category: str) -> str:
         topic = raw_prompt
         if "Анонс" in topic:
             if ":" in topic:
@@ -94,13 +104,15 @@ class MultiImageGenerator(ImageGenerator):
             if "—" in topic:
                 topic = topic.split("—")[0].strip()
         if len(topic) < 5:
-            topic = "Технологии и инновации"
+            topic = "Technology and innovation"
 
-        return (
-            f"Создай профессиональную иллюстрацию на тему: {topic}. "
-            f"Включи элементы: графики, иконки, шестерёнки, схемы. "
-            f"Стиль: современный плоский дизайн, яркие цвета: синий, фиолетовый, золотой. "
-            f"Формат: вертикальный 9:16, высокое разрешение, без текста, без людей."
-        )
+        templates = {
+            "construction": f"Professional digital illustration about {topic}. Include construction site, cranes, blueprints, hard hats, buildings, BIM model. Style: flat design, modern architecture, vibrant colors: blue, orange, white, gray. High resolution, 4K, vertical 9:16, no text, no people.",
+            "business": f"Corporate digital illustration about {topic}. Include growth charts, graphs, gears, handshake, dollar signs. Style: clean, modern, flat vector. Colors: navy, gold, white, teal. High resolution, 4K, vertical 9:16, no text, no people.",
+            "ai": f"Futuristic digital illustration about {topic}. Include neural networks, AI chips, data streams, glowing circuits. Style: cyberpunk, neon, high-tech. Colors: purple, blue, cyan, gold. High resolution, 4K, vertical 9:16, no text, no people.",
+            "education": f"Educational digital illustration about {topic}. Include books, graduation cap, light bulb, globe, pencils. Style: colorful, flat vector, playful. Colors: blue, yellow, green, white. High resolution, 4K, vertical 9:16, no text, no people.",
+            "general": f"Creative digital illustration about {topic}. Include abstract icons, geometric shapes. Style: modern, clean, flat design. Colors: blue, purple, orange, white. High resolution, 4K, vertical 9:16, no text, no people."
+        }
+        return templates.get(category, templates["general"])
 
 multi_image = MultiImageGenerator()
