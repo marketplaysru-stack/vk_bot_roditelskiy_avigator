@@ -14,21 +14,16 @@ logger = logging.getLogger(__name__)
 
 class MultiImageGenerator(ImageGenerator):
     def __init__(self):
-        # Генераторы с увеличенными таймаутами
+        # Генераторы с увеличенными таймаутами (где поддерживается)
         self.generators = [
             ("Agnes", AgnesImageGenerator(timeout=120)),      # ПРИОРИТЕТ №1
-            ("HuggingFace", HuggingFaceGenerator(timeout=120)),
+            ("HuggingFace", HuggingFaceGenerator()),          # таймаут не поддерживается, но мы не передаём
             ("Pollinations", PollinationsGenerator(timeout=60)),
             ("Picsum", PicsumGenerator()),
         ]
         self.banner_generator = BannerGenerator()
 
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
-        # Для анонсов можно попробовать сначала Agnes, но чтобы не ждать 2 минуты,
-        # оставляем баннер (локально) – он быстрый и стабильный.
-        # Однако если вы хотите, чтобы анонсы тоже генерировались через Agnes,
-        # можно убрать условие is_announce и всегда пробовать генераторы.
-        # Пока оставим баннер для анонсов, но для постов – Agnes в приоритете.
         if is_announce:
             logger.info("Генерация баннера для анонса (локально)")
             try:
@@ -43,7 +38,6 @@ class MultiImageGenerator(ImageGenerator):
                 logger.error(f"Ошибка создания баннера для анонса: {e}")
                 return self._create_fallback_image()
 
-        # Для постов – ПЕРВАЯ ПОПЫТКА ЧЕРЕЗ AGNES
         detailed_prompt = self._build_detailed_prompt(prompt)
         logger.info(f"Промпт для генерации: {detailed_prompt[:200]}...")
 
@@ -59,7 +53,6 @@ class MultiImageGenerator(ImageGenerator):
             except Exception as e:
                 logger.error(f"{name} ошибка: {e}")
 
-        # Если все API не сработали – создаём баннер-заглушку для поста
         logger.warning("Все внешние генераторы не сработали, создаём баннер-заглушку")
         try:
             return self.banner_generator.create_banner(
