@@ -1,113 +1,28 @@
-"""
-publishers/uploader/imgbb.py
----------------------------------------
-Загрузка изображений в ImgBB.
-"""
-
-from __future__ import annotations
-
-import base64
-from pathlib import Path
-
+"""publishers/uploader/imgbb.py"""
 import requests
-
-from config import settings
-
+import base64
+from config import config
 from models.upload_result import UploadResult
 
-from publishers.uploader.base import BaseUploader
+class ImgbbUploader:
+    def __init__(self):
+        self.api_key = config.imgbb_api_key
 
+    def upload(self, image_bytes: bytes) -> UploadResult:
+        if not self.api_key:
+            return UploadResult(success=False, error="IMGBB_API_KEY не задан")
 
-class ImgbbUploader(BaseUploader):
-
-    name = "imgbb"
-
-    API_URL = "https://api.imgbb.com/1/upload"
-
-    # ==========================================
-
-    def upload(
-        self,
-        image,
-        **kwargs,
-    ) -> UploadResult:
+        url = "https://api.imgbb.com/1/upload"
+        b64 = base64.b64encode(image_bytes).decode('utf-8')
+        payload = {"key": self.api_key, "image": b64}
 
         try:
-
-            path = self.validate(image)
-
-            self.before_upload(path)
-
-            with open(path, "rb") as f:
-
-                encoded = base64.b64encode(
-                    f.read()
-                ).decode()
-
-            response = requests.post(
-
-                self.API_URL,
-
-                timeout=60,
-
-                data={
-
-                    "key": settings.IMGBB_API_KEY,
-
-                    "image": encoded,
-
-                }
-
-            )
-
-            response.raise_for_status()
-
-            data = response.json()
-
-            if not data.get("success"):
-
-                return UploadResult.error_result(
-
-                    provider=self.name,
-
-                    message="ImgBB вернул ошибку."
-
-                )
-
-            image_data = data["data"]
-
-            result = UploadResult.success_result(
-
-                provider=self.name,
-
-                url=image_data["url"],
-
-                upload_id=image_data["id"],
-
-                file_name=path.name,
-
-                file_path=str(path),
-
-                size=path.stat().st_size,
-
-                width=int(image_data["width"]),
-
-                height=int(image_data["height"]),
-
-                metadata=image_data,
-
-            )
-
-            return self.after_upload(result)
-
-        except Exception as exc:
-
-            return UploadResult.error_result(
-
-                provider=self.name,
-
-                message=str(exc),
-
-                exception=repr(exc),
-
-            )
+            resp = requests.post(url, data=payload, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("success"):
+                return UploadResult(success=True, url=data["data"]["url"])
+            else:
+                return UploadResult(success=False, error=str(data))
+        except Exception as e:
+            return UploadResult(success=False, error=str(e))
