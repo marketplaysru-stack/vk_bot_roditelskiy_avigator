@@ -47,10 +47,10 @@ class VKPublisher:
             return PublishResult(ok=True, post_id=resp.get("post_id"))
 
         except Exception as e:
-            logger.error(f"Ошибка публикации: {e}")
+            logger.error(f"Ошибка публикации в группу: {e}")
             return PublishResult(ok=False, message=str(e))
 
-    # ----- НОВЫЙ МЕТОД ДЛЯ ЛИЧНОЙ СТРАНИЦЫ -----
+    # ----- ИСПРАВЛЕННЫЙ МЕТОД ДЛЯ ЛИЧНОЙ СТРАНИЦЫ -----
     def publish_to_user(self, text: str, image_bytes: Optional[bytes] = None, link: Optional[str] = None) -> PublishResult:
         """Публикует анонс на личную стену пользователя."""
         try:
@@ -64,9 +64,20 @@ class VKPublisher:
                 cache_dir.mkdir(parents=True, exist_ok=True)
                 temp_path = cache_dir / f"temp_user_{random.randint(1, 1000000)}.jpg"
                 temp_path.write_bytes(image_bytes)
-                photo = upload.photo_wall(str(temp_path))
-                os.remove(temp_path)
-                attachments.append(f"photo{photo[0]['owner_id']}_{photo[0]['id']}")
+                try:
+                    # Загружаем фото на стену пользователя (group_id=None)
+                    photo = upload.photo_wall(str(temp_path), group_id=None)
+                    os.remove(temp_path)
+                    if photo and isinstance(photo, list) and len(photo) > 0:
+                        attachments.append(f"photo{photo[0]['owner_id']}_{photo[0]['id']}")
+                        logger.info("Фото для анонса успешно загружено")
+                    else:
+                        logger.warning("Не удалось загрузить фото для анонса (пустой ответ)")
+                except Exception as e:
+                    logger.error(f"Ошибка загрузки фото для анонса: {e}")
+                    # Удаляем временный файл, если он остался
+                    if temp_path.exists():
+                        os.remove(temp_path)
 
             full_text = text
             if link:
