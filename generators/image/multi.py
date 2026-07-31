@@ -1,155 +1,29 @@
-"""
-generators/image/multi.py
----------------------------------------
-Менеджер генерации изображений.
-"""
+import random
+import logging
+from typing import Optional
+from .base import ImageGenerator
+from .picsum import PicsumGenerator
+from .pollinations import PollinationsGenerator
+from config import config
 
-from __future__ import annotations
+logger = logging.getLogger(__name__)
 
-from pathlib import Path
-
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
-
-from core.logger import get_logger
-
-from generators.image.pollinations import PollinationsGenerator
-from generators.image.picsum import PicsumGenerator
-
-
-class MultiImageGenerator:
-
+class MultiImageGenerator(ImageGenerator):
     def __init__(self):
+        self.generators = [
+            PollinationsGenerator(),
+            PicsumGenerator(),
+        ]
 
-        self.logger = get_logger(self.__class__.__name__)
-
-        self.pollinations = PollinationsGenerator()
-
-        self.picsum = PicsumGenerator()
-
-    # ==================================================
-
-    def generate(
-        self,
-        prompt: str,
-    ) -> Path:
-
-        # ----------------------------------------------
-        # Pollinations
-        # ----------------------------------------------
-
-        for attempt in range(3):
-
+    def generate(self, prompt: str) -> Optional[bytes]:
+        # Попробуем улучшить промпт с помощью текстового генератора (если есть)
+        for gen in self.generators:
             try:
-
-                self.logger.info(
-
-                    "Pollinations (%s/3)",
-
-                    attempt + 1,
-
-                )
-
-                return self.pollinations.generate(
-                    prompt
-                )
-
-            except Exception as exc:
-
-                self.logger.warning(exc)
-
-        # ----------------------------------------------
-        # Picsum
-        # ----------------------------------------------
-
-        try:
-
-            self.logger.info(
-
-                "Переход на Picsum"
-
-            )
-
-            return self.picsum.generate(
-                prompt
-            )
-
-        except Exception as exc:
-
-            self.logger.warning(exc)
-
-        # ----------------------------------------------
-        # Заглушка
-        # ----------------------------------------------
-
-        self.logger.warning(
-
-            "Создание локальной картинки"
-
-        )
-
-        return self.create_placeholder(
-            prompt
-        )
-
-    # ==================================================
-
-    def create_placeholder(
-        self,
-        text: str,
-    ) -> Path:
-
-        output = Path("data/images")
-
-        output.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        file = output / "placeholder.png"
-
-        image = Image.new(
-
-            "RGB",
-
-            (1024, 1024),
-
-            (240, 240, 240),
-
-        )
-
-        draw = ImageDraw.Draw(image)
-
-        try:
-
-            font = ImageFont.truetype(
-
-                "arial.ttf",
-
-                32,
-
-            )
-
-        except Exception:
-
-            font = ImageFont.load_default()
-
-        draw.multiline_text(
-
-            (40, 40),
-
-            text,
-
-            fill="black",
-
-            font=font,
-
-        )
-
-        image.save(file)
-
-        return file
-
+                result = gen.generate(prompt)
+                if result:
+                    return result
+            except Exception as e:
+                logger.warning(f"Генератор {gen.__class__.__name__} не сработал: {e}")
+        return None
 
 multi_image = MultiImageGenerator()
