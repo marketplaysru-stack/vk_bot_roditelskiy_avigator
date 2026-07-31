@@ -1,4 +1,4 @@
-"""generators/image/genapi.py – генерация через GenAPI (krea-v2) с ожиданием"""
+"""generators/image/genapi.py – генерация через GenAPI (krea-v2) с правильными параметрами"""
 import os
 import requests
 import logging
@@ -24,11 +24,22 @@ class GenAPIGenerator(ImageGenerator):
             "Authorization": f"Bearer {self.api_key}"
         }
 
-        # 1) Отправляем запрос на генерацию
+        # Формируем payload по документации (из примера)
         payload = {
             "prompt": prompt,
-            "callback_url": None
+            "model": kwargs.get("model", "medium"),
+            "aspect_ratio": kwargs.get("aspect_ratio", "1:1"),
+            "creativity": kwargs.get("creativity", "medium"),
+            "image_style_references": kwargs.get("image_style_references", []),
+            "styles": kwargs.get("styles", []),
+            "moodboards": kwargs.get("moodboards", [
+                {
+                    "id": "1e51738c-7413-469e-93b6-ad50db460a1f",
+                    "strength": 1
+                }
+            ])
         }
+        # Если передан negative_prompt – можно добавить, если API поддерживает
         if negative_prompt:
             payload["negative_prompt"] = negative_prompt
 
@@ -38,14 +49,13 @@ class GenAPIGenerator(ImageGenerator):
         result = resp.json()
         logger.info(f"Ответ GenAPI: {json.dumps(result, ensure_ascii=False)[:500]}")
 
-        # 2) Если статус processing – ждём завершения
+        # Если статус processing – ждём
         if result.get("status") == "processing":
             request_id = result.get("request_id")
             if not request_id:
                 raise Exception("GenAPI не вернул request_id")
             logger.info(f"Генерация в процессе, request_id: {request_id}, ожидаем...")
-            # Ждём до 60 секунд, проверяя статус
-            for _ in range(30):  # 30 попыток по 2 секунды = 60 сек
+            for _ in range(30):
                 time.sleep(2)
                 status_resp = requests.get(
                     f"{self.status_url}/{request_id}",
@@ -63,11 +73,9 @@ class GenAPIGenerator(ImageGenerator):
             else:
                 raise Exception("Таймаут ожидания генерации")
 
-        # 3) Проверяем, что статус success
         if result.get("status") != "success":
             raise Exception(f"GenAPI вернул ошибку: {result}")
 
-        # 4) Извлекаем URL
         output = result.get("output")
         if output is None:
             raise Exception(f"GenAPI не вернул output: {result}")
