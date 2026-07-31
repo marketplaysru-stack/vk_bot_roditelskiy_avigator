@@ -99,13 +99,19 @@ class CommandHandler:
                 return "❌ Не удалось сгенерировать текст"
             logger.info(f"Текст сгенерирован (длина {len(text)})")
 
-            # 2) Генерация картинки для поста (обычная иллюстрация, не баннер)
-            logger.info(f"Генерация картинки для темы: {topic}")
-            image_bytes = multi_image.generate(topic, is_announce=False)
+            # 2) Генерация баннера для поста (без кнопки, но с темой)
+            logger.info(f"Генерация баннера для поста")
+            image_bytes = multi_image.generate(
+                topic,
+                is_announce=False,
+                title=topic[:50],
+                subtitle="Подробности в нашем посте",
+                cta="ЧИТАТЬ"
+            )
             if image_bytes:
-                logger.info(f"Картинка получена, размер {len(image_bytes)} байт")
+                logger.info(f"Баннер для поста получен, размер {len(image_bytes)} байт")
             else:
-                logger.warning("Генератор не вернул байты картинки")
+                logger.warning("Не удалось сгенерировать баннер для поста")
 
             # 3) Публикация в группу
             post = Post(text=text, image_bytes=image_bytes)
@@ -117,13 +123,13 @@ class CommandHandler:
 
             group_link = f"https://vk.com/club{abs(group.group_id)}"
 
-            # 4) Анонс на личную страницу (с баннером)
+            # 4) Анонс на личную страницу (с баннером с кнопкой)
             if config.vk_user_id and config.vk_token_user:
                 logger.info("Начинаем создание анонса на личную страницу")
                 try:
                     announce_text = text_manager.generate_announce(topic, group_name)
 
-                    # Генерируем баннер для анонса
+                    # Генерируем баннер для анонса (с кнопкой подписки)
                     announce_image = multi_image.generate(
                         f"Анонс: {topic} — подпишись на {group_name}",
                         is_announce=True,
