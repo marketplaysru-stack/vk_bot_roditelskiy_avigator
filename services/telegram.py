@@ -2,7 +2,6 @@
 import requests
 import logging
 from typing import Optional, List, Dict, Any
-from config import config
 
 logger = logging.getLogger("telegram")
 
@@ -11,9 +10,9 @@ class TelegramClient:
         self.token = token
         self.base_url = f"https://api.telegram.org/bot{token}"
 
-    def send_message(self, chat_id: int, text: str, parse_mode: str = "HTML") -> bool:
+    def send_message(self, chat_id: int, text: str) -> bool:
         url = f"{self.base_url}/sendMessage"
-        payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
+        payload = {"chat_id": chat_id, "text": text}
         try:
             resp = requests.post(url, json=payload, timeout=30)
             if resp.status_code == 200:
