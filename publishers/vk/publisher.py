@@ -34,7 +34,7 @@ class VKPublisher:
                 os.remove(temp_path)
                 attachments.append(f"photo{photo[0]['owner_id']}_{photo[0]['id']}")
             elif post.image_url:
-                # Скачиваем по URL и загружаем
+                # Если вдруг есть URL (для совместимости)
                 img_resp = requests.get(post.image_url, timeout=30)
                 img_resp.raise_for_status()
                 cache_dir = Path("cache/images")
