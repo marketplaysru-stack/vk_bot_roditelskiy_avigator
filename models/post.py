@@ -1,3 +1,4 @@
+"""models/post.py"""
 from dataclasses import dataclass
 from typing import Optional
 
@@ -5,6 +6,4 @@ from typing import Optional
 class Post:
     text: str
     image_url: Optional[str] = None
-
-    def add_image(self, url: str):
-        self.image_url = url
+    image_bytes: Optional[bytes] = None
