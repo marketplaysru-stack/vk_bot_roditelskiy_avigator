@@ -21,17 +21,16 @@ class VKPublisher:
         self.token = token
 
     def _prepare_image(self, image_bytes: bytes) -> Optional[bytes]:
-        """Проверяет и конвертирует изображение в JPEG, если необходимо."""
+        """Проверяет и конвертирует изображение в JPEG."""
         try:
-            # Пытаемся открыть изображение
             img = Image.open(io.BytesIO(image_bytes))
-            # Конвертируем в RGB (если RGBA) и сохраняем как JPEG
             if img.mode in ('RGBA', 'LA', 'P'):
                 img = img.convert('RGB')
-            # Сохраняем в буфер
             buf = io.BytesIO()
             img.save(buf, format='JPEG', quality=90)
-            return buf.getvalue()
+            result = buf.getvalue()
+            logger.info(f"Изображение подготовлено, размер: {len(result)} байт")
+            return result
         except Exception as e:
             logger.error(f"Ошибка подготовки изображения: {e}")
             return None
@@ -44,13 +43,11 @@ class VKPublisher:
 
             attachments = []
             if post.image_bytes:
-                # Подготавливаем изображение
                 prepared = self._prepare_image(post.image_bytes)
                 if not prepared:
-                    logger.error("Не удалось подготовить изображение, публикуем без фото")
+                    logger.error("Не удалось подготовить изображение")
                     return self._publish_text_only(api, group, post.text)
 
-                # Сохраняем временный файл
                 cache_dir = Path("cache/images")
                 cache_dir.mkdir(parents=True, exist_ok=True)
                 temp_path = cache_dir / f"temp_{random.randint(1, 1000000)}.jpg"
@@ -73,7 +70,6 @@ class VKPublisher:
                         except:
                             pass
 
-            # Публикация
             params = {
                 "owner_id": group.vk_owner_id,
                 "message": post.text,
@@ -100,18 +96,47 @@ class VKPublisher:
             attachments = []
             if image_bytes:
                 prepared = self._prepare_image(image_bytes)
-                if prepared:
+                if not prepared:
+                    logger.error("Не удалось подготовить изображение для анонса")
+                    # Продолжаем без фото
+                else:
                     cache_dir = Path("cache/images")
                     cache_dir.mkdir(parents=True, exist_ok=True)
                     temp_path = cache_dir / f"temp_user_{random.randint(1, 1000000)}.jpg"
                     temp_path.write_bytes(prepared)
+                    logger.info(f"Временный файл для анонса сохранён: {temp_path}")
+
                     try:
+                        # Метод для загрузки на стену пользователя (без group_id)
                         photo = upload.photo_wall(str(temp_path))
                         if photo and isinstance(photo, list) and len(photo) > 0:
                             attachments.append(f"photo{photo[0]['owner_id']}_{photo[0]['id']}")
                             logger.info("Фото для анонса загружено")
+                        else:
+                            logger.error("Загрузка фото для анонса вернула пустой результат")
                     except Exception as e:
                         logger.error(f"Ошибка загрузки фото для анонса: {e}")
+                        # Попробуем альтернативный способ загрузки
+                        try:
+                            # Получаем сервер для загрузки на стену пользователя
+                            upload_url = vk.method('photos.getWallUploadServer')['upload_url']
+                            # Загружаем файл
+                            files = {'photo': open(str(temp_path), 'rb')}
+                            resp = requests.post(upload_url, files=files).json()
+                            if resp.get('photo'):
+                                save_result = vk.method('photos.saveWallPhoto', {
+                                    'photo': resp['photo'],
+                                    'server': resp['server'],
+                                    'hash': resp['hash']
+                                })
+                                if save_result:
+                                    photo = save_result[0]
+                                    attachments.append(f"photo{photo['owner_id']}_{photo['id']}")
+                                    logger.info("Фото для анонса загружено (альтернативный способ)")
+                            else:
+                                logger.error(f"Альтернативная загрузка не удалась: {resp}")
+                        except Exception as e2:
+                            logger.error(f"Альтернативная загрузка тоже не удалась: {e2}")
                     finally:
                         if temp_path.exists():
                             try:
