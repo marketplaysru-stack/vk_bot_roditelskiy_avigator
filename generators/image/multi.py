@@ -21,38 +21,30 @@ class MultiImageGenerator(ImageGenerator):
         self.banner_generator = BannerGenerator()
 
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
-        # Строим детальный промпт для фона
-        bg_prompt = self._build_detailed_prompt(prompt, is_announce)
+        # Для анонсов – используем локальный баннер (без внешних запросов)
+        if is_announce:
+            logger.info("Генерация баннера для анонса")
+            try:
+                return self.banner_generator.create_banner(title=title, subtitle=subtitle, cta=cta)
+            except Exception as e:
+                logger.error(f"Ошибка создания баннера: {e}")
+                return self._create_fallback_image()
 
-        # Получаем фон (иллюстрацию) от внешнего генератора
-        bg_bytes = None
+        # Для постов – используем внешние генераторы с детальным промптом
+        bg_prompt = self._build_detailed_prompt(prompt, is_announce=False)
         for gen in self.background_generators:
             try:
                 logger.info(f"Попытка генерации фона через {gen.__class__.__name__} с промптом: {bg_prompt[:150]}...")
-                bg_bytes = gen.generate(bg_prompt)
-                if bg_bytes and isinstance(bg_bytes, bytes) and len(bg_bytes) > 0:
-                    logger.info(f"Фон получен, размер {len(bg_bytes)} байт")
-                    break
+                result = gen.generate(bg_prompt)
+                if result and isinstance(result, bytes) and len(result) > 0:
+                    logger.info(f"Фон получен, размер {len(result)} байт")
+                    return result
             except Exception as e:
                 logger.warning(f"{gen.__class__.__name__} не сработал: {e}")
 
-        if not bg_bytes:
-            logger.warning("Не удалось получить фон, создаём заглушку")
-            bg_bytes = self._create_fallback_image()
-
-        # Если это анонс – превращаем фон в баннер с текстом
-        if is_announce:
-            try:
-                return self.banner_generator.create_banner_from_image(bg_bytes, title, subtitle, cta)
-            except Exception as e:
-                logger.error(f"Ошибка создания баннера: {e}")
-                return bg_bytes  # возвращаем фон без текста
-
-        # Для поста – просто фон
-        return bg_bytes
+        return self._create_fallback_image()
 
     def _build_detailed_prompt(self, raw_prompt: str, is_announce: bool) -> str:
-        """Формирует детальный промпт на основе темы."""
         # Извлекаем тему
         topic = raw_prompt
         if "Анонс" in topic:
@@ -67,12 +59,9 @@ class MultiImageGenerator(ImageGenerator):
         if len(topic) < 5:
             topic = "technology and innovation"
 
-        # Определяем категорию по ключевым словам
         keywords = topic.lower()
         if any(w in keywords for w in ['строитель', 'архитектур', 'здание', 'ремонт', 'стройка', 'bim']):
             category = "construction"
-        elif any(w in keywords for w in ['образован', 'учёб', 'школ', 'университет', 'курс']):
-            category = "education"
         elif any(w in keywords for w in ['бизнес', 'предприним', 'стартап', 'инвест']):
             category = "business"
         elif any(w in keywords for w in ['ии', 'нейросет', 'ai', 'машинн', 'интеллект']):
@@ -80,50 +69,13 @@ class MultiImageGenerator(ImageGenerator):
         else:
             category = "general"
 
-        # Шаблоны промптов для каждой категории
         templates = {
-            "construction": (
-                f"Professional vector illustration about {topic}. "
-                "Include construction site, cranes, blueprints, hard hats, buildings, tools, and geometric shapes. "
-                "Style: flat design, vibrant colors, modern architecture, isometric view. "
-                "Use blue, orange, white, gray. "
-                "Format: vertical 9:16, high resolution, no text, no people."
-            ),
-            "education": (
-                f"Modern illustration about {topic}. "
-                "Include books, graduation cap, light bulb, globe, pencils, and abstract learning icons. "
-                "Style: colorful, flat vector, playful yet professional. "
-                "Use blue, yellow, green, white. "
-                "Format: vertical 9:16, high resolution, no text, no people."
-            ),
-            "business": (
-                f"Corporate illustration about {topic}. "
-                "Include growth charts, graphs, gears, handshake, dollar signs, and office elements. "
-                "Style: professional, clean, modern, flat vector. "
-                "Use navy, gold, white, teal. "
-                "Format: vertical 9:16, high resolution, no text, no people."
-            ),
-            "ai": (
-                f"Futuristic illustration about {topic}. "
-                "Include neural networks, AI chips, data streams, glowing circuits, and robotic elements. "
-                "Style: cyberpunk, neon, high-tech, abstract. "
-                "Use purple, blue, cyan, gold. "
-                "Format: vertical 9:16, high resolution, no text, no people."
-            ),
-            "general": (
-                f"Creative vector illustration about {topic}. "
-                "Include abstract icons, geometric shapes, and vibrant colors. "
-                "Style: modern, clean, flat design. "
-                "Use blue, purple, orange, white. "
-                "Format: vertical 9:16, high resolution, no text, no people."
-            )
+            "construction": f"Professional vector illustration about {topic}. Include construction site, cranes, blueprints, hard hats, buildings, tools. Style: flat design, vibrant colors, modern architecture. Use blue, orange, white, gray. Vertical 9:16, no text, no people.",
+            "business": f"Corporate illustration about {topic}. Include growth charts, graphs, gears, handshake, dollar signs. Style: professional, clean, modern, flat vector. Use navy, gold, white, teal. Vertical 9:16, no text, no people.",
+            "ai": f"Futuristic illustration about {topic}. Include neural networks, AI chips, data streams, glowing circuits. Style: cyberpunk, neon, high-tech. Use purple, blue, cyan, gold. Vertical 9:16, no text, no people.",
+            "general": f"Creative vector illustration about {topic}. Include abstract icons, geometric shapes. Style: modern, clean, flat design. Use blue, purple, orange, white. Vertical 9:16, no text, no people."
         }
-        prompt = templates.get(category, templates["general"])
-        # Для анонса добавляем немного энергии
-        if is_announce:
-            prompt += " Bright, energetic, attention-grabbing."
-
-        return prompt
+        return templates.get(category, templates["general"])
 
     def _create_fallback_image(self) -> bytes:
         try:
