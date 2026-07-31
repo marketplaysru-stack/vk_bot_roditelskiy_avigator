@@ -2,7 +2,7 @@
 import logging
 from typing import Optional
 from .base import ImageGenerator
-from .genapi import GenAPIGenerator          # Импортируем GenAPI
+from .genapi import GenAPIGenerator          # Импорт GenAPI
 from .pollinations import PollinationsGenerator
 from .picsum import PicsumGenerator
 from .banner import BannerGenerator
@@ -21,7 +21,7 @@ class MultiImageGenerator(ImageGenerator):
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
         category = self._detect_category(prompt)
 
-        # Для анонсов – сразу баннер (или пробуем GenAPI, но оставим баннер для скорости)
+        # Для анонсов – сразу баннер (можно оставить баннер, чтобы не ждать)
         if is_announce:
             logger.info("Генерация баннера для анонса")
             try:
@@ -33,8 +33,7 @@ class MultiImageGenerator(ImageGenerator):
                 )
             except Exception as e:
                 logger.error(f"Ошибка баннера для анонса: {e}")
-                # Если баннер не сработал, попробуем обычную генерацию
-                pass
+                # Если баннер не сработал, пробуем обычную генерацию (но не для анонса)
 
         # Для постов – пробуем генераторы по очереди
         detailed_prompt = self._build_detailed_prompt(prompt)
