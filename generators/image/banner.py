@@ -7,9 +7,18 @@ class BannerGenerator(ImageGenerator):
     def __init__(self):
         pass
 
+    def generate(self, prompt: str = "", title: str = "", subtitle: str = "", cta: str = "") -> bytes:
+        """Генерирует баннер, но в нашем случае используется только для наложения текста на готовое изображение."""
+        # Это заглушка, реальная работа через create_banner_from_image
+        return self.create_banner_from_image(b'', title, subtitle, cta)
+
     def create_banner_from_image(self, image_bytes: bytes, title: str = "", subtitle: str = "", cta: str = "") -> bytes:
         """Принимает байты изображения и накладывает текст."""
-        img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        if not image_bytes:
+            # Если нет изображения, создаём заглушку
+            img = Image.new('RGB', (1024, 1024), color='#0a0a2e')
+        else:
+            img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
         draw = ImageDraw.Draw(img)
 
         width, height = img.size
