@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 class MultiImageGenerator(ImageGenerator):
     def __init__(self):
-        # Чёткий список генераторов (порядок важен)
         self.generators = [
             ("Gemini", GeminiGenerator(timeout=120)),
             ("Pixazo", PixazoGenerator(timeout=90)),
@@ -28,7 +27,6 @@ class MultiImageGenerator(ImageGenerator):
         logger.info(f"Промпт для генерации: {detailed_prompt[:200]}...")
 
         image_bytes = None
-        # Перебираем ВСЕ генераторы по порядку
         for name, gen in self.generators:
             try:
                 logger.info(f"Попытка генерации через {name} с таймаутом {getattr(gen, 'timeout', 'N/A')} сек")
@@ -36,19 +34,15 @@ class MultiImageGenerator(ImageGenerator):
                 if result and isinstance(result, bytes) and len(result) > 0:
                     logger.info(f"✅ Успешно сгенерировано через {name}, размер {len(result)} байт")
                     image_bytes = result
-                    break  # выходим при первом успехе
-                else:
-                    logger.warning(f"{name} вернул пустой результат")
+                    break
             except Exception as e:
                 logger.error(f"{name} ошибка: {e}")
-                # продолжаем цикл – пробуем следующий генератор
+                continue
 
-        # Если ни один генератор не дал результат – создаём заглушку
         if not image_bytes:
             logger.warning("Все генераторы не дали результат, создаём заглушку")
             image_bytes = self._create_fallback_image()
 
-        # Если это анонс – накладываем текст
         if is_announce:
             try:
                 logger.info("Накладываем текст на картинку для анонса")
@@ -60,7 +54,7 @@ class MultiImageGenerator(ImageGenerator):
                 )
             except Exception as e:
                 logger.error(f"Ошибка наложения текста: {e}")
-                return image_bytes  # возвращаем картинку без текста
+                return image_bytes
 
         return image_bytes
 
