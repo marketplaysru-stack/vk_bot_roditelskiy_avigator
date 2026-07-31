@@ -1,116 +1,53 @@
-"""
-publishers/vk/publisher.py
----------------------------------------
-Главный класс публикации в VK.
-"""
+import vk_api
+from vk_api.upload import VkUpload
+from ...core.logger import get_logger
+from ...models.group import Group
+from ...models.post import Post
+from ...models.publish_result import PublishResult
 
-from __future__ import annotations
-
-from core.logger import get_logger
-
-from models.group import Group
-from models.post import Post
-from models.publish_result import PublishResult
-
-from publishers.formatter.manager import formatter_manager
-
-from publishers.vk.api import VKApi
-from publishers.vk.photos import VKPhotos
-from publishers.vk.wall import VKWall
-
+logger = get_logger("VKPublisher")
 
 class VKPublisher:
-    """
-    Публикация постов ВКонтакте.
-    """
-
     def __init__(self, token: str):
+        self.token = token
 
-        self.logger = get_logger(self.__class__.__name__)
-
-        self.api = VKApi(token)
-
-        self.photos = VKPhotos(self.api)
-
-        self.wall = VKWall(self.api)
-
-    # ==================================================
-
-    def publish(
-        self,
-        post: Post,
-        group: Group,
-    ) -> PublishResult:
-
+    def publish(self, post: Post, group: Group) -> PublishResult:
         try:
+            vk = vk_api.VkApi(token=self.token)
+            api = vk.get_api()
+            upload = VkUpload(api)
 
-            # ------------------------------------------
-            # Форматирование поста
-            # ------------------------------------------
+            attachments = []
+            if post.image_url:
+                # Скачиваем и загружаем фото на стену
+                import requests
+                from pathlib import Path
+                import random
+                import os
 
-            post = formatter_manager.format(
-                post,
-                group,
-            )
+                img_resp = requests.get(post.image_url, timeout=30)
+                img_resp.raise_for_status()
+                temp_path = Path("cache/images") / f"temp_{random.randint(1, 1000000)}.jpg"
+                temp_path.parent.mkdir(exist_ok=True)
+                temp_path.write_bytes(img_resp.content)
+                photo = upload.photo_wall(str(temp_path), group_id=abs(group.vk_owner_id))
+                os.remove(temp_path)
+                attachments.append(f"photo{photo[0]['owner_id']}_{photo[0]['id']}")
 
-            attachment = None
+            params = {
+                "owner_id": group.vk_owner_id,
+                "message": post.text,
+                "access_token": self.token,
+                "v": "5.131"
+            }
+            if group.group_id < 0:
+                params["from_group"] = 1
+            if attachments:
+                params["attachments"] = ",".join(attachments)
 
-            # ------------------------------------------
-            # Загрузка изображения
-            # ------------------------------------------
+            resp = api.wall.post(**params)
+            return PublishResult(ok=True, post_id=resp.get("post_id"))
 
-            if post.image:
-
-                attachment = self.photos.upload_photo(
-
-                    group.group_id,
-
-                    post.image,
-
-                )
-
-            # ------------------------------------------
-            # Публикация
-            # ------------------------------------------
-
-            post_id = self.wall.post(
-
-                group_id=group.group_id,
-
-                message=post.text,
-
-                attachments=attachment,
-
-            )
-
-            self.logger.info(
-
-                "Пост успешно опубликован (%s)",
-
-                post_id,
-
-            )
-
-            return PublishResult.success_result(
-
-                provider="VK",
-
-                post_id=str(post_id),
-
-                message="Пост опубликован",
-
-            )
-
-        except Exception as exc:
-
-            self.logger.exception(exc)
-
-            return PublishResult.error_result(
-
-                provider="VK",
-
-                message=str(exc),
-
-                exception=repr(exc),
-
-            )
+        except Exception as e:
+            logger.error(f"Ошибка публикации: {e}")
+            return PublishResult(ok=False, message=str(e))
