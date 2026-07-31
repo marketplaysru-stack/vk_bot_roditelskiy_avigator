@@ -1,38 +1,35 @@
-def load(self):
+from __future__ import annotations
+from typing import Optional
+from models.group import Group
+from config import config
 
-    self.groups.clear()
+class GroupsManager:
+    def __init__(self):
+        self._groups = self._load_groups()
 
-    if not self.filename.exists():
+    def _load_groups(self):
+        groups = {}
+        for name, cfg in config.groups.items():
+            groups[name] = Group(
+                name=name,
+                group_id=cfg.group_id,
+                token=cfg.vk_token,
+                enabled=cfg.enabled,
+                category=cfg.category,
+                style=cfg.style,
+            )
+        return groups
 
-        self.logger.warning(
-            "Файл групп не найден: %s",
-            self.filename,
-        )
+    def first(self) -> Optional[Group]:
+        for g in self._groups.values():
+            if g.enabled:
+                return g
+        return None
 
-        return
+    def get(self, name: str) -> Optional[Group]:
+        return self._groups.get(name)
 
-    with self.filename.open(
-        "r",
-        encoding="utf-8",
-    ) as file:
+    def all(self):
+        return list(self._groups.values())
 
-        data = json.load(file)
-
-    for item in data:
-
-        token_name = item.get("token", "")
-
-        if token_name:
-
-            token = getattr(settings, token_name, "")
-
-            item["token"] = token
-
-        self.groups.append(
-            Group.from_dict(item)
-        )
-
-    self.logger.info(
-        "Загружено групп: %s",
-        len(self.groups),
-    )
+groups = GroupsManager()
