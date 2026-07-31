@@ -1,8 +1,8 @@
 """generators/image/huggingface.py"""
 import os
 import io
+import requests
 import logging
-from huggingface_hub import InferenceClient
 from core.base import ImageGenerator
 
 logger = logging.getLogger(__name__)
@@ -12,32 +12,28 @@ class HuggingFaceGenerator(ImageGenerator):
         self.token = token or os.getenv("HF_TOKEN")
         self.timeout = timeout
         if not self.token:
-            logger.warning("HF_TOKEN не задан, HuggingFaceGenerator будет недоступен")
-            # Не бросаем исключение, чтобы бот мог продолжить с другими генераторами
-        else:
-            self.client = InferenceClient(model="stabilityai/stable-diffusion-xl-base-1.0", token=self.token)
+            raise ValueError("HF_TOKEN не задан")
+        # Используем Inference API (бесплатный)
+        self.api_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
 
     def generate(self, prompt: str, negative_prompt: str = "", **kwargs) -> bytes:
-        if not self.token:
-            raise ValueError("HF_TOKEN не задан")
-        width = int(os.getenv("IMAGE_WIDTH", 1024))
-        height = int(os.getenv("IMAGE_HEIGHT", 1024))
-        steps = int(os.getenv("IMAGE_STEPS", 30))
-        cfg = float(os.getenv("IMAGE_CFG_SCALE", 7.0))
-        neg = negative_prompt or os.getenv("IMAGE_NEGATIVE_PROMPT", "")
-
-        logger.info(f"Отправка запроса в HuggingFace (таймаут {self.timeout} сек)")
-        # InferenceClient не поддерживает timeout напрямую, поэтому используем собственный механизм
-        # Можно использовать requests с timeout, но здесь оставим как есть.
-        # Примечание: если timeout критичен, можно переписать на requests.
-        image = self.client.text_to_image(
-            prompt=prompt,
-            negative_prompt=neg,
-            num_inference_steps=steps,
-            guidance_scale=cfg,
-            width=width,
-            height=height
-        )
-        buf = io.BytesIO()
-        image.save(buf, format="PNG")
-        return buf.getvalue()
+        headers = {"Authorization": f"Bearer {self.token}"}
+        # Для SDXL можно передавать параметры в payload
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "negative_prompt": negative_prompt or os.getenv("IMAGE_NEGATIVE_PROMPT", ""),
+                "width": int(os.getenv("IMAGE_WIDTH", 1024)),
+                "height": int(os.getenv("IMAGE_HEIGHT", 1024)),
+                "num_inference_steps": int(os.getenv("IMAGE_STEPS", 30)),
+                "guidance_scale": float(os.getenv("IMAGE_CFG_SCALE", 7.0)),
+            }
+        }
+        logger.info(f"Отправка запроса в Hugging Face (таймаут {self.timeout} сек)")
+        response = requests.post(self.api_url, headers=headers, json=payload, timeout=self.timeout)
+        if response.status_code == 200:
+            return response.content  # изображение в байтах
+        else:
+            error_msg = f"Ошибка Hugging Face: {response.status_code} {response.text}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
