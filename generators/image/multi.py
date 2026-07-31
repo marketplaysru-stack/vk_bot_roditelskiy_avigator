@@ -1,60 +1,155 @@
-from core.base import ImageGenerator
-import logging
-import random
-import os  # <-- добавлен импорт os
+"""
+generators/image/multi.py
+---------------------------------------
+Менеджер генерации изображений.
+"""
 
-logger = logging.getLogger(__name__)
+from __future__ import annotations
 
-class PicsumGenerator(ImageGenerator):
+from pathlib import Path
+
+from PIL import Image
+from PIL import ImageDraw
+from PIL import ImageFont
+
+from core.logger import get_logger
+
+from generators.image.pollinations import PollinationsGenerator
+from generators.image.picsum import PicsumGenerator
+
+
+class MultiImageGenerator:
+
     def __init__(self):
-        self.width = int(os.getenv("IMAGE_WIDTH", "1024"))
-        self.height = int(os.getenv("IMAGE_HEIGHT", "1024"))
-        logger.info("PicsumGenerator инициализирован")
 
-    def generate(self, prompt: str, **kwargs) -> str:
-        seed = random.randint(1, 1000000)
-        url = f"https://picsum.photos/seed/{seed}/{self.width}/{self.height}"
-        logger.info(f"Picsum вернул URL: {url}")
-        return url
+        self.logger = get_logger(self.__class__.__name__)
 
-class MultiImageGenerator(ImageGenerator):
-    def __init__(self):
-        self.generators = []
-        try:
-            self.generators.append(PicsumGenerator())
-            logger.info("✅ PicsumGenerator добавлен (основной)")
-        except Exception as e:
-            logger.error(f"❌ Picsum не загружен: {e}")
+        self.pollinations = PollinationsGenerator()
 
-        try:
-            from generators.image.huggingface import HuggingFaceGenerator
-            self.generators.append(HuggingFaceGenerator())
-            logger.info("✅ HuggingFaceGenerator добавлен (резерв)")
-        except Exception as e:
-            logger.warning(f"❌ HuggingFace не загружен: {e}")
+        self.picsum = PicsumGenerator()
 
-        try:
-            from generators.image.agnes import AgnesImageGenerator
-            self.generators.append(AgnesImageGenerator())
-            logger.info("✅ AgnesImageGenerator добавлен (резерв)")
-        except Exception as e:
-            logger.warning(f"❌ Agnes не загружен: {e}")
+    # ==================================================
 
-        if not self.generators:
-            from generators.image.dummy import DummyImageGenerator
-            self.generators.append(DummyImageGenerator())
-            logger.warning("✅ DummyImageGenerator добавлен (заглушка)")
+    def generate(
+        self,
+        prompt: str,
+    ) -> Path:
 
-    def generate(self, prompt: str, **kwargs) -> str:
-        last_error = None
-        for gen in self.generators:
+        # ----------------------------------------------
+        # Pollinations
+        # ----------------------------------------------
+
+        for attempt in range(3):
+
             try:
-                logger.info(f"🔄 Пробуем генератор {gen.__class__.__name__}")
-                result = gen.generate(prompt, **kwargs)
-                if result:
-                    logger.info(f"✅ {gen.__class__.__name__} сгенерировал")
-                    return result
-            except Exception as e:
-                logger.warning(f"❌ {gen.__class__.__name__} не сработал: {e}")
-                last_error = e
-        raise RuntimeError(f"Все генераторы не сработали. Последняя ошибка: {last_error}")
+
+                self.logger.info(
+
+                    "Pollinations (%s/3)",
+
+                    attempt + 1,
+
+                )
+
+                return self.pollinations.generate(
+                    prompt
+                )
+
+            except Exception as exc:
+
+                self.logger.warning(exc)
+
+        # ----------------------------------------------
+        # Picsum
+        # ----------------------------------------------
+
+        try:
+
+            self.logger.info(
+
+                "Переход на Picsum"
+
+            )
+
+            return self.picsum.generate(
+                prompt
+            )
+
+        except Exception as exc:
+
+            self.logger.warning(exc)
+
+        # ----------------------------------------------
+        # Заглушка
+        # ----------------------------------------------
+
+        self.logger.warning(
+
+            "Создание локальной картинки"
+
+        )
+
+        return self.create_placeholder(
+            prompt
+        )
+
+    # ==================================================
+
+    def create_placeholder(
+        self,
+        text: str,
+    ) -> Path:
+
+        output = Path("data/images")
+
+        output.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        file = output / "placeholder.png"
+
+        image = Image.new(
+
+            "RGB",
+
+            (1024, 1024),
+
+            (240, 240, 240),
+
+        )
+
+        draw = ImageDraw.Draw(image)
+
+        try:
+
+            font = ImageFont.truetype(
+
+                "arial.ttf",
+
+                32,
+
+            )
+
+        except Exception:
+
+            font = ImageFont.load_default()
+
+        draw.multiline_text(
+
+            (40, 40),
+
+            text,
+
+            fill="black",
+
+            font=font,
+
+        )
+
+        image.save(file)
+
+        return file
+
+
+multi_image = MultiImageGenerator()
