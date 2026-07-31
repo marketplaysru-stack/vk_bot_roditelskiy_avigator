@@ -18,13 +18,14 @@ class MultiImageGenerator(ImageGenerator):
         ]
 
     def generate(self, prompt: str) -> Optional[bytes]:
-        # Если промпт короткий или содержит только тему, преобразуем в детальный рекламный промпт
+        # Если промпт короткий или содержит "тему" или "Анонс", строим детальный промпт на английском
         if len(prompt) < 30 or "тему" in prompt or prompt.startswith("Анонс"):
-            prompt = self._build_promotional_prompt(prompt)
+            is_announce = "Анонс" in prompt
+            prompt = self._build_promotional_prompt(prompt, is_announce)
 
         for gen in self.generators:
             try:
-                logger.info(f"Попытка генерации через {gen.__class__.__name__} с промптом: {prompt[:100]}...")
+                logger.info(f"Попытка генерации через {gen.__class__.__name__} с промптом (первые 100 символов): {prompt[:100]}...")
                 result = gen.generate(prompt)
                 if result and isinstance(result, bytes) and len(result) > 0:
                     logger.info(f"Успешно, размер {len(result)} байт")
@@ -37,42 +38,73 @@ class MultiImageGenerator(ImageGenerator):
         logger.info("Создаём локальную картинку-заглушку")
         return self._create_fallback_image()
 
-    def _build_promotional_prompt(self, topic: str) -> str:
-        """Формирует рекламный промпт для картинки на основе темы."""
-        # Извлекаем ключевые слова из темы (удаляем стоп-слова)
-        stopwords = {'и', 'в', 'на', 'с', 'по', 'для', 'как', 'новый', 'новые', 'это', 'что', 'при', 'через', 'без', 'у'}
-        words = topic.split()
-        keywords = [w for w in words if w.lower() not in stopwords and len(w) > 2]
-        if not keywords:
-            keywords = ["технологии", "инновации"]
+    def _build_promotional_prompt(self, raw_prompt: str, is_announce: bool = False) -> str:
+        """Формирует детальный рекламный промпт на английском."""
+        # Извлекаем тему из промпта (убираем "Анонс:" и лишнее)
+        topic = raw_prompt
+        if "Анонс" in topic:
+            # Убираем "Анонс:" и всё до двоеточия
+            if ":" in topic:
+                parts = topic.split(":", 1)
+                if len(parts) > 1:
+                    topic = parts[1].strip()
+                else:
+                    topic = parts[0].strip()
+            # Убираем "— подпишись на ..." если есть
+            if "—" in topic:
+                topic = topic.split("—")[0].strip()
 
-        # Выбираем случайный стиль
+        # Если тема слишком короткая, используем заглушку
+        if len(topic) < 5:
+            topic = "technology and innovation"
+
+        # Список объектов для разных категорий (выбираем случайно)
+        objects_pool = [
+            "charts, graphs, data visualization",
+            "gears, circuit boards, microchips",
+            "light bulbs, idea icons, brain with neural links",
+            "abstract geometric shapes, isometric cubes, glowing hexagons",
+            "business icons, handshake, target, money bags, arrows up",
+            "cloud computing, servers, network nodes, wifi symbols",
+            "education icons, books, graduation cap, pencil, ruler"
+        ]
+        # Выбираем 2–3 случайных набора
+        selected = random.sample(objects_pool, k=min(2, len(objects_pool)))
+        objects = " and ".join(selected)
+
+        # Базовые стили
         styles = [
-            "яркий рекламный плакат, футуристичный дизайн, неоновые цвета",
-            "современный минималистичный баннер, высокое качество, 4K",
-            "динамичный постер, абстрактные формы, золотые и синие тона",
-            "изометрическая иллюстрация, плоский дизайн, технологичные иконки"
+            "modern flat design, vibrant colors, professional infographic",
+            "futuristic isometric illustration, neon accents, high detail",
+            "minimalist vector art, clean lines, bright gradient background",
+            "corporate style, polished, 3D elements, glossy surfaces"
         ]
         style = random.choice(styles)
 
-        # Выбираем цветовую гамму
+        # Цвета
         palettes = [
-            "синий, фиолетовый, золотой",
-            "тёмно-синий, бирюзовый, белый",
-            "чёрный, золотой, серебряный",
-            "индиго, розовый, неоновый зелёный"
+            "blue, purple, gold",
+            "dark blue, teal, white",
+            "black, gold, silver",
+            "indigo, pink, neon green",
+            "orange, navy, white"
         ]
         colors = random.choice(palettes)
 
-        # Формируем промпт
+        # Для анонса добавляем призыв
+        call_to_action = ""
+        if is_announce:
+            call_to_action = "with a clear call to action like 'Subscribe' or 'Join now', eye-catching buttons, energetic composition"
+
+        # Собираем промпт на английском
         prompt = (
-            f"Создай изображение в стиле {style}. "
-            f"Тема: {topic}. "
-            f"Включи элементы: {', '.join(keywords[:5])}. "
-            f"Используй цвета: {colors}. "
-            f"Формат: вертикальный, 9:16, для социальных сетей. "
-            f"Без людей, без текста, без лиц. "
-            f"Высокое разрешение, детализированно."
+            f"Professional promotional illustration about {topic}. "
+            f"Include {objects}. "
+            f"Use {style}. "
+            f"Color palette: {colors}. "
+            f"{call_to_action} "
+            f"Format: vertical 9:16, high resolution, bright, catchy, for social media ad. "
+            f"No people, no faces, no text."
         )
         return prompt
 
