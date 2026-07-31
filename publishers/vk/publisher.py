@@ -24,8 +24,17 @@ class VKPublisher:
             upload = VkUpload(api)
 
             attachments = []
-            if post.image_url:
-                # Скачиваем изображение
+            if post.image_bytes:
+                # Загружаем байты напрямую в VK
+                cache_dir = Path("cache/images")
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                temp_path = cache_dir / f"temp_{random.randint(1, 1000000)}.jpg"
+                temp_path.write_bytes(post.image_bytes)
+                photo = upload.photo_wall(str(temp_path), group_id=abs(group.vk_owner_id))
+                os.remove(temp_path)
+                attachments.append(f"photo{photo[0]['owner_id']}_{photo[0]['id']}")
+            elif post.image_url:
+                # Скачиваем по URL и загружаем
                 img_resp = requests.get(post.image_url, timeout=30)
                 img_resp.raise_for_status()
                 cache_dir = Path("cache/images")
