@@ -62,7 +62,7 @@ class CommandHandler:
     def _generate_only(self, topic: str) -> str:
         try:
             text = text_manager.generate(topic)
-            safe_text = html.escape(text)  # защита от спецсимволов
+            safe_text = html.escape(text)
             return f"📝 Сгенерированный текст:\n\n{safe_text}"
         except Exception as e:
             logger.error(f"Ошибка генерации: {e}")
@@ -74,19 +74,32 @@ class CommandHandler:
             return f"❌ Группа '{group_name}' не найдена. Используйте /list"
 
         try:
+            # 1) Генерация текста
+            logger.info(f"Генерация текста для темы: {topic}")
             text = text_manager.generate(topic)
             if not text:
                 return "❌ Не удалось сгенерировать текст"
+            logger.info(f"Текст сгенерирован (длина {len(text)})")
 
+            # 2) Генерация картинки
+            logger.info(f"Генерация картинки для темы: {topic}")
             image_bytes = multi_image.generate(topic)
             image_url = None
+
             if image_bytes:
+                logger.info(f"Картинка получена, размер {len(image_bytes)} байт")
                 from publishers.uploader.imgbb import ImgbbUploader
                 uploader = ImgbbUploader()
                 upload_result = uploader.upload(image_bytes)
-                if upload_result and upload_result.url:
+                if upload_result and upload_result.success and upload_result.url:
                     image_url = upload_result.url
+                    logger.info(f"Картинка загружена на imgbb: {image_url}")
+                else:
+                    logger.error(f"Ошибка загрузки на imgbb: {upload_result.error if upload_result else 'неизвестная'}")
+            else:
+                logger.warning("Генератор не вернул байты картинки")
 
+            # 3) Публикация
             post = Post(text=text, image_url=image_url)
             publisher = VKPublisher(group.token)
             result = publisher.publish(post, group)
