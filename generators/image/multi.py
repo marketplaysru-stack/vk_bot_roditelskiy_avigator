@@ -2,6 +2,8 @@
 import logging
 from typing import Optional
 from .base import ImageGenerator
+from .deepai import DeepAIGenerator        # Импорт DeepAI
+from .modelslab import ModelsLabGenerator
 from .agnes import AgnesImageGenerator
 from .huggingface import HuggingFaceGenerator
 from .pollinations import PollinationsGenerator
@@ -14,16 +16,17 @@ logger = logging.getLogger(__name__)
 
 class MultiImageGenerator(ImageGenerator):
     def __init__(self):
+        # Приоритет: DeepAI → ModelsLab → Agnes → Pollinations → Picsum
         self.generators = [
+            ("DeepAI", DeepAIGenerator(timeout=120)),         # ПРИОРИТЕТ №1
+            ("ModelsLab", ModelsLabGenerator(timeout=120)),
             ("Agnes", AgnesImageGenerator(timeout=120)),
-            ("HuggingFace", HuggingFaceGenerator(timeout=120)),
             ("Pollinations", PollinationsGenerator(timeout=60)),
             ("Picsum", PicsumGenerator()),
         ]
         self.banner_generator = BannerGenerator()
 
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
-        # Определяем категорию
         category = self._detect_category(prompt)
 
         # Для анонсов – сразу баннер (локально)
@@ -56,7 +59,7 @@ class MultiImageGenerator(ImageGenerator):
             except Exception as e:
                 logger.error(f"{name} ошибка: {e}")
 
-        # Если все API не сработали – создаём баннер-заглушку для поста
+        # Если все API не сработали – создаём баннер-заглушку
         logger.warning("Все внешние генераторы не сработали, создаём баннер-заглушку")
         try:
             return self.banner_generator.create_banner(
