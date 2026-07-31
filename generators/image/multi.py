@@ -18,7 +18,6 @@ class MultiImageGenerator(ImageGenerator):
         ]
 
     def generate(self, prompt: str) -> Optional[bytes]:
-        # Если промпт короткий или содержит "тему" или "Анонс", строим детальный промпт на английском
         if len(prompt) < 30 or "тему" in prompt or prompt.startswith("Анонс"):
             is_announce = "Анонс" in prompt
             prompt = self._build_promotional_prompt(prompt, is_announce)
@@ -39,69 +38,87 @@ class MultiImageGenerator(ImageGenerator):
         return self._create_fallback_image()
 
     def _build_promotional_prompt(self, raw_prompt: str, is_announce: bool = False) -> str:
-        """Формирует детальный рекламный промпт на английском."""
-        # Извлекаем тему из промпта (убираем "Анонс:" и лишнее)
+        # Извлекаем тему
         topic = raw_prompt
         if "Анонс" in topic:
-            # Убираем "Анонс:" и всё до двоеточия
             if ":" in topic:
                 parts = topic.split(":", 1)
                 if len(parts) > 1:
                     topic = parts[1].strip()
                 else:
                     topic = parts[0].strip()
-            # Убираем "— подпишись на ..." если есть
             if "—" in topic:
                 topic = topic.split("—")[0].strip()
-
-        # Если тема слишком короткая, используем заглушку
         if len(topic) < 5:
             topic = "technology and innovation"
 
-        # Список объектов для разных категорий (выбираем случайно)
+        # Расширенный пул объектов (разные категории)
         objects_pool = [
-            "charts, graphs, data visualization",
-            "gears, circuit boards, microchips",
+            "charts, graphs, data visualization, infographic elements",
+            "gears, circuit boards, microchips, AI chip",
             "light bulbs, idea icons, brain with neural links",
             "abstract geometric shapes, isometric cubes, glowing hexagons",
             "business icons, handshake, target, money bags, arrows up",
             "cloud computing, servers, network nodes, wifi symbols",
-            "education icons, books, graduation cap, pencil, ruler"
+            "education icons, books, graduation cap, pencil, ruler",
+            "rocket launch, stars, futuristic city skyline",
+            "cellular structure, DNA helix, medical symbols",
+            "financial growth graph, coins, stock charts, dollar sign",
+            "creative tools, palette, brush, design elements",
+            "robotics, gears, mechanical arm, automation"
         ]
-        # Выбираем 2–3 случайных набора
-        selected = random.sample(objects_pool, k=min(2, len(objects_pool)))
+        # Выбираем 2-3 случайных набора
+        num_sets = random.randint(2, 3)
+        selected = random.sample(objects_pool, k=min(num_sets, len(objects_pool)))
         objects = " and ".join(selected)
 
-        # Базовые стили
+        # Стили (больше вариантов)
         styles = [
             "modern flat design, vibrant colors, professional infographic",
             "futuristic isometric illustration, neon accents, high detail",
             "minimalist vector art, clean lines, bright gradient background",
-            "corporate style, polished, 3D elements, glossy surfaces"
+            "corporate style, polished, 3D elements, glossy surfaces",
+            "cyberpunk style, dynamic composition, glowing lines",
+            "hand-drawn doodle style, colorful, creative",
+            "realistic 3D render, soft shadows, depth of field"
         ]
         style = random.choice(styles)
 
-        # Цвета
+        # Цветовые палитры
         palettes = [
             "blue, purple, gold",
             "dark blue, teal, white",
             "black, gold, silver",
             "indigo, pink, neon green",
-            "orange, navy, white"
+            "orange, navy, white",
+            "red, yellow, dark gray",
+            "violet, cyan, magenta",
+            "green, emerald, gold"
         ]
         colors = random.choice(palettes)
 
-        # Для анонса добавляем призыв
+        # Для анонса – более призывный текст и элементы
         call_to_action = ""
         if is_announce:
-            call_to_action = "with a clear call to action like 'Subscribe' or 'Join now', eye-catching buttons, energetic composition"
+            call_to_action = "with a clear call to action like 'Subscribe' or 'Join now', eye-catching buttons, energetic composition, glowing 'Subscribe' badge"
 
-        # Собираем промпт на английском
+        # Дополнительная композиция (случайно)
+        compositions = [
+            "centered composition, floating objects",
+            "dynamic diagonal layout, overlapping shapes",
+            "symmetrical balance, top-down view",
+            "layered depth, foreground and background elements",
+            "isometric view, angled perspective"
+        ]
+        composition = random.choice(compositions)
+
+        # Формируем финальный промпт на английском
         prompt = (
             f"Professional promotional illustration about {topic}. "
             f"Include {objects}. "
             f"Use {style}. "
             f"Color palette: {colors}. "
+            f"Composition: {composition}. "
             f"{call_to_action} "
             f"Format: vertical 9:16, high resolution, bright, catchy, for social media ad. "
             f"No people, no faces, no text."
