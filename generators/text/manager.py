@@ -1,56 +1,18 @@
-"""
-generators/text/manager.py
----------------------------------------
-Менеджер текстовых генераторов.
-"""
+from .base import TextGenerator
+from .agnes import AgnesGenerator
+from core.logger import get_logger
 
-from __future__ import annotations
+logger = get_logger("text_manager")
 
-from config import settings
-
-from generators.text.agnes import AgnesGenerator
-
-
-class TextGeneratorManager:
-    """
-    Менеджер текстовых генераторов.
-    """
-
+class TextManager:
     def __init__(self):
+        self._generator: TextGenerator = AgnesGenerator()
 
-        self._generators = {
-            "agnes": AgnesGenerator(),
-        }
+    def generate(self, topic: str) -> str:
+        try:
+            return self._generator.generate(topic)
+        except Exception as e:
+            logger.error(f"Ошибка генерации текста: {e}")
+            return f"⚡ Пост на тему: {topic}"
 
-    # ==================================================
-
-    def get(self):
-
-        provider = getattr(
-            settings,
-            "TEXT_PROVIDER",
-            "agnes",
-        ).lower()
-
-        return self._generators.get(
-            provider,
-            self._generators["agnes"],
-        )
-
-    # ==================================================
-
-    def generate(
-        self,
-        topic: str,
-        **kwargs,
-    ):
-
-        generator = self.get()
-
-        return generator.generate(
-            topic,
-            **kwargs,
-        )
-
-
-text_manager = TextGeneratorManager()
+text_manager = TextManager()
