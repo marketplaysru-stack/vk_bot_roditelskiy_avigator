@@ -22,9 +22,8 @@ class GenAPIGenerator(ImageGenerator):
             "Authorization": f"Bearer {self.api_key}"
         }
 
-        # Формируем запрос по документации GenAPI
+        # Убираем callback_url, если он не обязателен
         payload = {
-            "callback_url": None,
             "prompt": prompt
         }
 
