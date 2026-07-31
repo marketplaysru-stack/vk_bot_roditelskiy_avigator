@@ -15,7 +15,7 @@ class GenAPIGenerator(ImageGenerator):
         if not self.api_key:
             raise ValueError("GENAPI_API_KEY не задан")
         self.base_url = "https://api.gen-api.ru/api/v1/networks/krea-v2"
-        self.poll_interval = 2  # секунды между проверками
+        self.status_url = "https://api.gen-api.ru/api/v1/requests"
 
     def generate(self, prompt: str, negative_prompt: str = "", **kwargs) -> bytes:
         headers = {
@@ -24,10 +24,10 @@ class GenAPIGenerator(ImageGenerator):
             "Authorization": f"Bearer {self.api_key}"
         }
 
-        # Отправляем задание
+        # 1) Отправляем запрос на генерацию
         payload = {
-            "callback_url": None,
-            "prompt": prompt
+            "prompt": prompt,
+            "callback_url": None
         }
         if negative_prompt:
             payload["negative_prompt"] = negative_prompt
@@ -36,66 +36,52 @@ class GenAPIGenerator(ImageGenerator):
         resp = requests.post(self.base_url, headers=headers, json=payload, timeout=self.timeout)
         resp.raise_for_status()
         result = resp.json()
-        logger.info(f"Первичный ответ: {result}")
+        logger.info(f"Ответ GenAPI: {json.dumps(result, ensure_ascii=False)[:500]}")
 
-        # Получаем request_id
-        request_id = result.get("request_id")
-        if not request_id:
-            raise Exception(f"GenAPI не вернул request_id: {result}")
-
-        # Статус может быть сразу "processing" или "success"
-        status = result.get("status")
-        if status == "success":
-            output = result.get("output")
-            if output:
-                return self._get_image_from_output(output)
+        # 2) Если статус processing – ждём завершения
+        if result.get("status") == "processing":
+            request_id = result.get("request_id")
+            if not request_id:
+                raise Exception("GenAPI не вернул request_id")
+            logger.info(f"Генерация в процессе, request_id: {request_id}, ожидаем...")
+            # Ждём до 60 секунд, проверяя статус
+            for _ in range(30):  # 30 попыток по 2 секунды = 60 сек
+                time.sleep(2)
+                status_resp = requests.get(
+                    f"{self.status_url}/{request_id}",
+                    headers=headers,
+                    timeout=self.timeout
+                )
+                status_resp.raise_for_status()
+                status_data = status_resp.json()
+                logger.info(f"Статус: {status_data.get('status')}")
+                if status_data.get("status") == "success":
+                    result = status_data
+                    break
+                elif status_data.get("status") == "error":
+                    raise Exception(f"GenAPI ошибка: {status_data}")
             else:
-                raise Exception("Ответ success, но нет output")
+                raise Exception("Таймаут ожидания генерации")
 
-        # Если статус processing – ждём
-        if status == "processing":
-            logger.info(f"Задача в обработке (request_id={request_id}), ожидаем...")
-            # Используем GET-запрос для проверки статуса (если API поддерживает)
-            # По примеру: возможно нужно использовать другой эндпоинт для получения статуса
-            # Для простоты будем повторять POST с тем же payload? Но это неправильно.
-            # Лучше использовать отдельный эндпоинт status, если он есть.
-            # Пока заглушка: ждём фиксированное время и пробуем получить результат через тот же эндпоинт?
-            # Реализуем простой polling через отдельный запрос (если API даёт возможность)
-            # В документации GenAPI скорее всего есть /api/v1/requests/<request_id>
-            status_url = f"https://api.gen-api.ru/api/v1/requests/{request_id}"
-            start_time = time.time()
-            while time.time() - start_time < self.timeout:
-                time.sleep(self.poll_interval)
-                try:
-                    status_resp = requests.get(status_url, headers=headers, timeout=30)
-                    status_resp.raise_for_status()
-                    status_data = status_resp.json()
-                    logger.info(f"Статус задачи: {status_data}")
-                    if status_data.get("status") == "success":
-                        output = status_data.get("output")
-                        if output:
-                            return self._get_image_from_output(output)
-                        else:
-                            raise Exception("Статус success, но нет output")
-                    elif status_data.get("status") == "failed":
-                        raise Exception(f"Задача завершилась с ошибкой: {status_data}")
-                except Exception as e:
-                    logger.warning(f"Ошибка при проверке статуса: {e}")
-                    continue
-            raise Exception(f"Превышено время ожидания для request_id={request_id}")
+        # 3) Проверяем, что статус success
+        if result.get("status") != "success":
+            raise Exception(f"GenAPI вернул ошибку: {result}")
 
-        raise Exception(f"Неизвестный статус: {status}")
+        # 4) Извлекаем URL
+        output = result.get("output")
+        if output is None:
+            raise Exception(f"GenAPI не вернул output: {result}")
 
-    def _get_image_from_output(self, output):
-        """Извлекает URL изображения из поля output"""
         if isinstance(output, list) and len(output) > 0:
             image_url = output[0]
         elif isinstance(output, str):
             image_url = output
         else:
             raise Exception(f"Неожиданный формат output: {output}")
+
         if not image_url:
-            raise Exception("URL изображения пуст")
+            raise Exception("GenAPI не вернул URL изображения")
+
         logger.info(f"Скачиваем изображение: {image_url}")
         img_resp = requests.get(image_url, timeout=self.timeout)
         img_resp.raise_for_status()
