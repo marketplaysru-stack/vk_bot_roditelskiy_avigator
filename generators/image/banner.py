@@ -1,4 +1,4 @@
-"""generators/image/banner.py – профессиональные баннеры с текстом и иконками"""
+"""generators/image/banner.py – профессиональные баннеры без прозрачности"""
 import io
 import random
 from PIL import Image, ImageDraw, ImageFont
@@ -9,30 +9,37 @@ class BannerGenerator:
         self.height = 1024
 
     def create_banner(self, title: str = "", subtitle: str = "", cta: str = "", category: str = "general") -> bytes:
-        # Определяем тему
         theme = self._get_theme(category)
 
-        # Создаём изображение
+        # Основное изображение RGB
         img = Image.new('RGB', (self.width, self.height), color='#0a0a2e')
         draw = ImageDraw.Draw(img)
 
-        # 1) Фон с градиентом
+        # Градиент
         self._draw_gradient(draw, theme)
 
-        # 2) Полупрозрачный оверлей для читаемости текста
-        self._draw_overlay(draw)
+        # Оверлей (создаём отдельно, конвертируем в RGB и накладываем)
+        overlay = Image.new('RGBA', (self.width, self.height), (0,0,0,0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        for y in range(self.height//2, self.height):
+            alpha = int(200 * (1 - (y - self.height//2) / (self.height//2)))
+            overlay_draw.rectangle((0, y, self.width, y+1), fill=(0,0,0,alpha))
+        # Накладываем оверлей как RGB
+        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+        draw = ImageDraw.Draw(img)
 
-        # 3) Иконки (эмодзи) – крупные и тематические
+        # Иконки
         self._draw_icons(draw, theme)
 
-        # 4) Текст – заголовок, подзаголовок, кнопка
+        # Текст
         self._draw_text(draw, title, subtitle, cta, theme)
 
-        # 5) Рамка (для завершённого вида)
+        # Рамка
         self._draw_frame(draw, theme)
 
+        # Сохраняем как JPEG (без прозрачности)
         buf = io.BytesIO()
-        img.save(buf, format='PNG')
+        img.save(buf, format='JPEG', quality=95)
         return buf.getvalue()
 
     def _get_theme(self, category: str):
@@ -81,17 +88,6 @@ class BannerGenerator:
                 b = int(c2[2] + (c3[2] - c2[2]) * (ratio - 0.5) * 2)
             draw.rectangle((0, y, self.width, y+1), fill=(r, g, b))
 
-    def _draw_overlay(self, draw):
-        # Полупрозрачный оверлей снизу (для читаемости текста)
-        overlay = Image.new('RGBA', (self.width, self.height), (0,0,0,0))
-        overlay_draw = ImageDraw.Draw(overlay)
-        for y in range(self.height//2, self.height):
-            alpha = int(200 * (1 - (y - self.height//2) / (self.height//2)))
-            overlay_draw.rectangle((0, y, self.width, y+1), fill=(0,0,0,alpha))
-        img = Image.new('RGB', (self.width, self.height))
-        img.paste(overlay, (0,0), overlay)
-        draw.bitmap((0,0), img, fill=None)
-
     def _draw_icons(self, draw, theme):
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 120)
@@ -99,7 +95,6 @@ class BannerGenerator:
             font = ImageFont.load_default()
 
         icons = theme['icons']
-        # Размещаем иконки по углам и в центре
         positions = [
             (80, 80),
             (self.width-160, 80),
@@ -148,7 +143,6 @@ class BannerGenerator:
             draw.rectangle((x-40, y_offset-30, x+tw+40, y_offset+th+30), fill='#FFD700', outline=None)
             draw.text((x, y_offset), cta, fill='#0a0a2e', font=font_cta)
 
-        # Логотип вверху
         try:
             logo_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 35)
             draw.text((30, 30), "AI Навигатор", fill='white', font=logo_font)
@@ -156,7 +150,6 @@ class BannerGenerator:
             pass
 
     def _draw_frame(self, draw, theme):
-        # Рамка по краям
         color = theme['colors'][1]
         draw.rectangle((10, 10, self.width-10, self.height-10), outline=color, width=8)
 
