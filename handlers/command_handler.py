@@ -81,26 +81,18 @@ class CommandHandler:
                 return "❌ Не удалось сгенерировать текст"
             logger.info(f"Текст сгенерирован (длина {len(text)})")
 
-            # 2) Генерация картинки
+            # 2) Генерация картинки (байты)
             logger.info(f"Генерация картинки для темы: {topic}")
             image_bytes = multi_image.generate(topic)
-            image_url = None
-
             if image_bytes:
                 logger.info(f"Картинка получена, размер {len(image_bytes)} байт")
-                from publishers.uploader.imgbb import ImgbbUploader
-                uploader = ImgbbUploader()
-                upload_result = uploader.upload(image_bytes)
-                if upload_result and upload_result.success and upload_result.url:
-                    image_url = upload_result.url
-                    logger.info(f"Картинка загружена на imgbb: {image_url}")
-                else:
-                    logger.error(f"Ошибка загрузки на imgbb: {upload_result.error if upload_result else 'неизвестная'}")
             else:
                 logger.warning("Генератор не вернул байты картинки")
 
-            # 3) Публикация
-            post = Post(text=text, image_url=image_url)
+            # 3) Создаём пост с байтами картинки (image_url не используется)
+            post = Post(text=text, image_bytes=image_bytes)
+
+            # 4) Публикация
             publisher = VKPublisher(group.token)
             result = publisher.publish(post, group)
 
