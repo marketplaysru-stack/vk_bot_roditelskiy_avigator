@@ -23,18 +23,24 @@ class MultiImageGenerator(ImageGenerator):
         self.banner_generator = BannerGenerator()
 
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
+        # Определяем категорию
+        category = self._detect_category(prompt)
+
+        # Для анонсов – сразу баннер (локально)
         if is_announce:
-            logger.info("Генерация баннера для анонса (локально)")
+            logger.info("Генерация баннера для анонса")
             try:
                 return self.banner_generator.create_banner(
                     title=title or "🔥 НОВОСТЬ",
                     subtitle=subtitle or prompt[:60],
-                    cta=cta or "ПОДПИСЫВАЙСЯ"
+                    cta=cta or "ПОДПИСЫВАЙСЯ",
+                    category=category
                 )
             except Exception as e:
                 logger.error(f"Ошибка создания баннера для анонса: {e}")
                 return self._create_fallback_image()
 
+        # Для постов – сначала пробуем внешние генераторы
         detailed_prompt = self._build_detailed_prompt(prompt)
         logger.info(f"Промпт для генерации: {detailed_prompt[:200]}...")
 
@@ -50,19 +56,33 @@ class MultiImageGenerator(ImageGenerator):
             except Exception as e:
                 logger.error(f"{name} ошибка: {e}")
 
+        # Если все API не сработали – создаём баннер-заглушку для поста
         logger.warning("Все внешние генераторы не сработали, создаём баннер-заглушку")
         try:
             return self.banner_generator.create_banner(
                 title=prompt[:50],
                 subtitle="Подробности в посте",
-                cta="ЧИТАТЬ"
+                cta="ЧИТАТЬ",
+                category=category
             )
         except Exception as e:
             logger.error(f"Ошибка создания баннера-заглушки: {e}")
             return self._create_fallback_image()
 
+    def _detect_category(self, prompt: str) -> str:
+        topic = prompt.lower()
+        if any(w in topic for w in ['строитель', 'архитектур', 'здание', 'ремонт', 'стройка', 'bim', 'кран', 'чертёж']):
+            return "construction"
+        elif any(w in topic for w in ['бизнес', 'предприним', 'стартап', 'инвест', 'финанс']):
+            return "business"
+        elif any(w in topic for w in ['ии', 'нейросет', 'ai', 'машинн', 'интеллект', 'чатгпт']):
+            return "ai"
+        elif any(w in topic for w in ['образован', 'учёб', 'школ', 'университет', 'курс', 'лекция']):
+            return "education"
+        else:
+            return "general"
+
     def _build_detailed_prompt(self, raw_prompt: str) -> str:
-        # Упрощённая версия – можно расширить
         topic = raw_prompt
         if "Анонс" in topic:
             if ":" in topic:
@@ -72,7 +92,15 @@ class MultiImageGenerator(ImageGenerator):
                 topic = topic.split("—")[0].strip()
         if len(topic) < 5:
             topic = "технологии и инновации"
-        return f"Professional illustration about {topic}. Include relevant icons and graphics. Style: modern, flat design, vibrant colors. Vertical 9:16, no text, no people."
+        category = self._detect_category(topic)
+        templates = {
+            "construction": f"Professional illustration about {topic}. Include construction site, cranes, blueprints, hard hats, buildings, BIM model. Style: flat design, modern architecture, vibrant colors: blue, orange, white. Vertical 9:16, no text, no people.",
+            "business": f"Corporate illustration about {topic}. Include growth charts, graphs, gears, handshake, dollar signs. Style: clean, modern, flat vector. Colors: navy, gold, white, teal. Vertical 9:16, no text, no people.",
+            "ai": f"Futuristic illustration about {topic}. Include neural networks, AI chips, data streams, glowing circuits. Style: cyberpunk, neon, high-tech. Colors: purple, blue, cyan, gold. Vertical 9:16, no text, no people.",
+            "education": f"Educational illustration about {topic}. Include books, graduation cap, light bulb, globe, pencils. Style: colorful, flat vector, playful. Colors: blue, yellow, green, white. Vertical 9:16, no text, no people.",
+            "general": f"Creative illustration about {topic}. Include abstract icons, geometric shapes. Style: modern, clean, flat design. Colors: blue, purple, orange, white. Vertical 9:16, no text, no people."
+        }
+        return templates.get(category, templates["general"])
 
     def _create_fallback_image(self) -> bytes:
         try:
