@@ -107,20 +107,26 @@ class RSSScheduler:
                     logger.error(f"Группа '{target_group_name}' не найдена")
                     continue
 
-                # Генерация текста и картинки
+                # 1) Генерация текста и картинки для поста в группу
                 text = text_manager.generate(title)
-                image_bytes = multi_image.generate(title)
+                image_bytes = multi_image.generate(title)  # multi_image сам создаст промпт
                 post = Post(text=text, image_bytes=image_bytes)
 
-                # Публикация в группу
+                # 2) Публикация в группу
                 publisher = VKPublisher(group.token)
                 result = publisher.publish(post, group)
                 logger.info(f"Автоматическая публикация в '{target_group_name}': {result}")
 
-                # ----- Анонс на личную страницу -----
+                if not result.ok:
+                    logger.error(f"Не удалось опубликовать в группу {target_group_name}: {result.message}")
+                    continue
+
+                # 3) Анонс на личную страницу
                 if config.vk_user_id and config.vk_token_user:
                     try:
+                        # Генерируем текст анонса (короткий, призывный)
                         announce_text = text_manager.generate_announce(title, target_group_name)
+                        # Генерируем отдельную картинку для анонса с пометкой "Анонс"
                         announce_image = multi_image.generate(f"Анонс: {title} — подпишись на {target_group_name}")
                         user_publisher = VKPublisher(config.vk_token_user)
                         group_link = f"https://vk.com/club{abs(group.group_id)}"
