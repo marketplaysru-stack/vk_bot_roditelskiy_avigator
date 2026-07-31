@@ -8,22 +8,22 @@ class BannerGenerator(ImageGenerator):
         pass
 
     def generate(self, prompt: str = "", title: str = "", subtitle: str = "", cta: str = "") -> bytes:
-        """Генерирует баннер, но в нашем случае используется только для наложения текста на готовое изображение."""
-        # Это заглушка, реальная работа через create_banner_from_image
+        """Заглушка для абстрактного метода generate."""
+        # Если вызван напрямую, используем заглушку
         return self.create_banner_from_image(b'', title, subtitle, cta)
 
     def create_banner_from_image(self, image_bytes: bytes, title: str = "", subtitle: str = "", cta: str = "") -> bytes:
         """Принимает байты изображения и накладывает текст."""
         if not image_bytes:
-            # Если нет изображения, создаём заглушку
+            # Заглушка: создаём простой фон
             img = Image.new('RGB', (1024, 1024), color='#0a0a2e')
         else:
             img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-        draw = ImageDraw.Draw(img)
 
+        draw = ImageDraw.Draw(img)
         width, height = img.size
 
-        # Загружаем шрифты
+        # Шрифты (с адаптивным размером)
         try:
             font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(height/14))
             font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", int(height/20))
@@ -33,7 +33,7 @@ class BannerGenerator(ImageGenerator):
             font_sub = ImageFont.load_default()
             font_cta = ImageFont.load_default()
 
-        # Полупрозрачный чёрный оверлей внизу
+        # Полупрозрачный оверлей внизу
         overlay = Image.new('RGBA', (width, height), (0,0,0,0))
         overlay_draw = ImageDraw.Draw(overlay)
         for y in range(height//2, height):
@@ -43,6 +43,7 @@ class BannerGenerator(ImageGenerator):
         draw = ImageDraw.Draw(img)
 
         y_offset = height - 120
+
         if title:
             bbox = draw.textbbox((0, 0), title, font=font_title)
             tw = bbox[2] - bbox[0]
