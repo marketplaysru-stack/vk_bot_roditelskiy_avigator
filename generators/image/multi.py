@@ -12,63 +12,64 @@ logger = logging.getLogger(__name__)
 
 class MultiImageGenerator(ImageGenerator):
     def __init__(self):
-        # Только рабочие генераторы
+        # Основной генератор — баннер (локальный), резерв — Pollinations, потом Picsum
         self.generators = [
+            ("Banner", None),  # будет создаваться отдельно
             ("Pollinations", PollinationsGenerator(timeout=90)),
             ("Picsum", PicsumGenerator()),
         ]
         self.banner_generator = BannerGenerator()
 
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
-        detailed_prompt = self._build_detailed_prompt(prompt)
-        logger.info(f"Промпт для генерации: {detailed_prompt[:200]}...")
+        # Определяем категорию
+        category = self._detect_category(prompt)
 
-        image_bytes = None
-        for name, gen in self.generators:
+        # Для анонсов – сразу баннер (с текстом)
+        if is_announce:
+            logger.info("Генерация баннера для анонса")
+            try:
+                return self.banner_generator.create_banner(
+                    title=title or "🔥 НОВОСТЬ",
+                    subtitle=subtitle or prompt[:60],
+                    cta=cta or "ПОДПИСЫВАЙСЯ",
+                    category=category
+                )
+            except Exception as e:
+                logger.error(f"Ошибка создания баннера для анонса: {e}")
+                return self._create_fallback_image()
+
+        # Для постов – сначала пробуем баннер (качественный, локальный)
+        logger.info("Генерация баннера для поста")
+        try:
+            banner_bytes = self.banner_generator.create_banner(
+                title=prompt[:50],
+                subtitle="Подробности в посте",
+                cta="ЧИТАТЬ",
+                category=category
+            )
+            if banner_bytes and isinstance(banner_bytes, bytes) and len(banner_bytes) > 0:
+                logger.info(f"✅ Баннер для поста создан, размер {len(banner_bytes)} байт")
+                return banner_bytes
+        except Exception as e:
+            logger.error(f"Ошибка создания баннера для поста: {e}")
+
+        # Если баннер не сработал, пробуем внешние генераторы (Pollinations, Picsum)
+        detailed_prompt = self._build_detailed_prompt(prompt)
+        for name, gen in self.generators[1:]:  # пропускаем Banner
+            if gen is None:
+                continue
             try:
                 logger.info(f"Попытка генерации через {name}")
                 result = gen.generate(detailed_prompt)
                 if result and isinstance(result, bytes) and len(result) > 0:
                     logger.info(f"✅ Успешно через {name}, размер {len(result)} байт")
-                    image_bytes = result
-                    break
+                    return result
             except Exception as e:
                 logger.error(f"{name} ошибка: {e}")
 
-        if not image_bytes:
-            logger.warning("Генераторы не дали результат, создаём баннер")
-            try:
-                if is_announce:
-                    return self.banner_generator.create_banner(
-                        title=title or "🔥 НОВОСТЬ",
-                        subtitle=subtitle or prompt[:60],
-                        cta=cta or "ПОДПИСЫВАЙСЯ",
-                        category=self._detect_category(prompt)
-                    )
-                else:
-                    return self.banner_generator.create_banner(
-                        title=prompt[:50],
-                        subtitle="Подробности в посте",
-                        cta="ЧИТАТЬ",
-                        category=self._detect_category(prompt)
-                    )
-            except Exception as e:
-                logger.error(f"Ошибка баннера: {e}")
-                return self._create_fallback_image()
-
-        if is_announce:
-            try:
-                return self.banner_generator.create_banner_from_image(
-                    image_bytes,
-                    title=title or "🔥 НОВОСТЬ",
-                    subtitle=subtitle or prompt[:60],
-                    cta=cta or "ПОДПИСЫВАЙСЯ"
-                )
-            except Exception as e:
-                logger.error(f"Ошибка наложения текста: {e}")
-                return image_bytes
-
-        return image_bytes
+        # Последний резерв – простая заглушка
+        logger.warning("Все генераторы не дали результат, создаём заглушку")
+        return self._create_fallback_image()
 
     def _detect_category(self, prompt: str) -> str:
         topic = prompt.lower()
@@ -95,8 +96,6 @@ class MultiImageGenerator(ImageGenerator):
             topic = "технологии и инновации"
 
         category = self._detect_category(topic)
-
-        # Промпт на русском (Pollinations понимает русский, но лучше добавить английский)
         templates_ru = {
             "construction": f"Иллюстрация на тему: {topic}. Стройка, краны, чертежи, каски, здания, BIM. Стиль: плоский дизайн, яркие цвета: синий, оранжевый, белый. Вертикальный формат 9:16, без текста, без людей.",
             "business": f"Иллюстрация на тему: {topic}. Графики роста, диаграммы, шестерёнки, рукопожатия, доллары. Стиль: современный, деловой. Цвета: тёмно-синий, золотой, белый. Вертикальный формат, без текста, без людей.",
