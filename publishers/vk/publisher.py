@@ -1,9 +1,15 @@
+"""publishers/vk/publisher.py"""
 import vk_api
 from vk_api.upload import VkUpload
-from ...core.logger import get_logger
-from ...models.group import Group
-from ...models.post import Post
-from ...models.publish_result import PublishResult
+import requests
+import random
+import os
+from pathlib import Path
+
+from core.logger import get_logger
+from models.group import Group
+from models.post import Post
+from models.publish_result import PublishResult
 
 logger = get_logger("VKPublisher")
 
@@ -19,16 +25,12 @@ class VKPublisher:
 
             attachments = []
             if post.image_url:
-                # Скачиваем и загружаем фото на стену
-                import requests
-                from pathlib import Path
-                import random
-                import os
-
+                # Скачиваем изображение
                 img_resp = requests.get(post.image_url, timeout=30)
                 img_resp.raise_for_status()
-                temp_path = Path("cache/images") / f"temp_{random.randint(1, 1000000)}.jpg"
-                temp_path.parent.mkdir(exist_ok=True)
+                cache_dir = Path("cache/images")
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                temp_path = cache_dir / f"temp_{random.randint(1, 1000000)}.jpg"
                 temp_path.write_bytes(img_resp.content)
                 photo = upload.photo_wall(str(temp_path), group_id=abs(group.vk_owner_id))
                 os.remove(temp_path)
