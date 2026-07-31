@@ -13,32 +13,20 @@ class BannerGenerator(ImageGenerator):
         return self.create_banner(title, subtitle, cta)
 
     def create_banner(self, title: str = "", subtitle: str = "", cta: str = "") -> bytes:
-        # Создаём изображение
+        # Выбираем случайную цветовую схему
+        schemes = [
+            {'bg': [(10,20,50), (30,10,60), (50,20,80)], 'accents': ['#FFD700', '#00BFFF', '#FF6B6B', '#7B68EE']},
+            {'bg': [(20,10,40), (60,20,70), (90,30,80)], 'accents': ['#FF4500', '#32CD32', '#1E90FF', '#FFD700']},
+            {'bg': [(5,15,30), (10,40,60), (20,60,80)], 'accents': ['#FF69B4', '#00FA9A', '#FFA500', '#8A2BE2']},
+            {'bg': [(40,10,30), (70,20,50), (100,30,70)], 'accents': ['#00FFFF', '#FF1493', '#FFD700', '#7FFF00']}
+        ]
+        scheme = random.choice(schemes)
+
         img = Image.new('RGB', (self.width, self.height), color='#0a0a2e')
         draw = ImageDraw.Draw(img)
 
-        # 1) Градиентный фон
-        self._draw_gradient(draw)
-
-        # 2) Абстрактные фигуры
-        self._draw_shapes(draw)
-
-        # 3) Иконки (Unicode)
-        self._draw_icons(draw)
-
-        # 4) Текст
-        self._draw_text(draw, title, subtitle, cta)
-
-        buf = io.BytesIO()
-        img.save(buf, format='PNG')
-        return buf.getvalue()
-
-    def _draw_gradient(self, draw):
-        colors = [
-            (10, 20, 50),   # тёмно-синий
-            (30, 10, 60),   # фиолетовый
-            (50, 20, 80)    # тёмно-фиолетовый
-        ]
+        # Градиент
+        colors = scheme['bg']
         for y in range(self.height):
             ratio = y / self.height
             r = int(colors[0][0] + (colors[-1][0] - colors[0][0]) * ratio)
@@ -46,35 +34,22 @@ class BannerGenerator(ImageGenerator):
             b = int(colors[0][2] + (colors[-1][2] - colors[0][2]) * ratio)
             draw.rectangle((0, y, self.width, y+1), fill=(r, g, b))
 
-    def _draw_shapes(self, draw):
-        # Круги разных размеров и цветов
-        colors = ['#FFD700', '#00BFFF', '#FF6B6B', '#7B68EE', '#32CD32', '#FF4500']
-        for _ in range(10):
+        # Фигуры
+        for _ in range(8):
             x = random.randint(0, self.width)
             y = random.randint(0, self.height)
             r = random.randint(30, 150)
-            color = random.choice(colors)
-            # Контур
+            color = random.choice(scheme['accents'])
             draw.ellipse((x-r, y-r, x+r, y+r), outline=color, width=3, fill=None)
-            # Маленький залитый круг внутри
             r2 = r // 3
             draw.ellipse((x-r2, y-r2, x+r2, y+r2), fill=color, outline=None)
 
-        # Линии (диагональные)
-        for _ in range(5):
-            x1 = random.randint(0, self.width)
-            y1 = random.randint(0, self.height)
-            x2 = random.randint(0, self.width)
-            y2 = random.randint(0, self.height)
-            draw.line((x1, y1, x2, y2), fill=random.choice(colors), width=4)
-
-    def _draw_icons(self, draw):
+        # Иконки
         icons = ['⚙️', '📊', '🤖', '💡', '🚀', '🎯', '💎', '⚡', '📈', '🧠', '🏗️', '📚', '💰', '🌐']
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 70)
+            font_icon = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 70)
         except:
-            font = ImageFont.load_default()
-
+            font_icon = ImageFont.load_default()
         positions = [
             (50, 50),
             (self.width-120, 50),
@@ -85,9 +60,9 @@ class BannerGenerator(ImageGenerator):
         ]
         for pos in positions:
             icon = random.choice(icons)
-            draw.text(pos, icon, fill='#FFFFFF', font=font)
+            draw.text(pos, icon, fill='#FFFFFF', font=font_icon)
 
-    def _draw_text(self, draw, title, subtitle, cta):
+        # Текст
         try:
             font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 80)
             font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 45)
@@ -97,7 +72,7 @@ class BannerGenerator(ImageGenerator):
             font_sub = ImageFont.load_default()
             font_cta = ImageFont.load_default()
 
-        # Тёмный оверлей снизу
+        # Оверлей
         overlay = Image.new('RGBA', (self.width, self.height), (0,0,0,0))
         overlay_draw = ImageDraw.Draw(overlay)
         for y in range(self.height//2, self.height):
@@ -127,9 +102,13 @@ class BannerGenerator(ImageGenerator):
             draw.rectangle((x-30, y_offset-20, x+tw+30, y_offset+60), fill='#FFD700', outline=None)
             draw.text((x, y_offset), cta, fill='#0a0a2e', font=font_cta)
 
-        # Логотип вверху
+        # Логотип
         try:
             logo_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 30)
             draw.text((30, 30), "AI Навигатор", fill='#FFFFFF', font=logo_font)
         except:
             pass
+
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        return buf.getvalue()
