@@ -1,4 +1,4 @@
-"""generators/image/pexels.py – поиск бесплатных фото по ключевым словам"""
+"""generators/image/pexels.py – поиск фото по теме"""
 import os
 import requests
 import logging
@@ -16,20 +16,16 @@ class PexelsGenerator(ImageGenerator):
         keywords = self._extract_keywords(prompt)
         if not keywords:
             keywords = "technology"
-
         headers = {"Authorization": self.api_key} if self.api_key else {}
         params = {"query": keywords, "per_page": 5, "page": 1}
-
         try:
             resp = requests.get(self.base_url, headers=headers, params=params, timeout=self.timeout)
             resp.raise_for_status()
             data = resp.json()
             photos = data.get("photos", [])
             if not photos:
-                raise Exception("Нет фото по запросу")
-            # Берём первое фото (можно рандомизировать)
+                raise Exception("Нет фото")
             photo_url = photos[0]["src"]["large2x"]
-            logger.info(f"Скачиваем фото с Pexels: {photo_url}")
             img_resp = requests.get(photo_url, timeout=self.timeout)
             img_resp.raise_for_status()
             return img_resp.content
