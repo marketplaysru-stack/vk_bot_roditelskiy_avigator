@@ -1,23 +1,23 @@
-"""generators/image/multi.py – баннер (основной), Pollinations, Picsum"""
+"""generators/image/multi.py – Pexels (основной), Pollinations, баннер"""
 import logging
 from typing import Optional
 from .base import ImageGenerator
+from .pexels import PexelsGenerator
 from .pollinations import PollinationsGenerator
-from .picsum import PicsumGenerator
 from .banner import BannerGenerator
 
 logger = logging.getLogger(__name__)
 
 class MultiImageGenerator(ImageGenerator):
     def __init__(self):
+        self.pexels = PexelsGenerator(timeout=30)
         self.pollinations = PollinationsGenerator(timeout=90)
-        self.picsum = PicsumGenerator()
         self.banner = BannerGenerator()
 
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
         category = self._detect_category(prompt)
 
-        # Для анонсов сразу баннер (быстро и стабильно)
+        # Анонсы – баннер (быстро)
         if is_announce:
             logger.info("Генерация баннера для анонса")
             return self.banner.create_banner(
@@ -28,36 +28,40 @@ class MultiImageGenerator(ImageGenerator):
                 is_announce=True
             )
 
-        # Для постов – сначала пытаемся получить картинку через Pollinations
-        detailed_prompt = self._build_detailed_prompt(prompt, category)
-        image_bytes = None
+        # Посты – сначала Pexels
+        try:
+            logger.info(f"Pexels: {prompt[:50]}...")
+            result = self.pexels.generate(prompt)
+            if result:
+                logger.info(f"✅ Pexels успешно, {len(result)} байт")
+                # Накладываем текст
+                return self.banner.create_banner_from_image(
+                    result,
+                    title=title or prompt[:50],
+                    subtitle=subtitle or "Подробности в посте",
+                    cta=cta or "ЧИТАТЬ"
+                )
+        except Exception as e:
+            logger.error(f"Pexels ошибка: {e}")
 
-        # 1) Pollinations
+        # Если Pexels не сработал – Pollinations
+        detailed_prompt = self._build_detailed_prompt(prompt, category)
         try:
             logger.info(f"Pollinations: {detailed_prompt[:150]}...")
             result = self.pollinations.generate(detailed_prompt)
             if result:
                 logger.info(f"✅ Pollinations успешно, {len(result)} байт")
-                image_bytes = result
-        except Exception as e:
-            logger.error(f"Pollinations ошибка: {e}")
-
-        # 2) Если Pollinations дал результат – накладываем текст (как в анонсах) или оставляем как есть
-        if image_bytes:
-            try:
                 return self.banner.create_banner_from_image(
-                    image_bytes,
+                    result,
                     title=title or prompt[:50],
                     subtitle=subtitle or "Подробности в посте",
                     cta=cta or "ЧИТАТЬ"
                 )
-            except Exception as e:
-                logger.error(f"Ошибка наложения текста: {e}")
-                # Если не получилось наложить текст, возвращаем картинку без текста
-                return image_bytes
+        except Exception as e:
+            logger.error(f"Pollinations ошибка: {e}")
 
-        # 3) Если Pollinations не сработал – баннер с нуля
-        logger.warning("Pollinations не сработал, создаём баннер")
+        # Если ничего не сработало – баннер
+        logger.warning("Все генераторы не сработали, создаём баннер")
         return self.banner.create_banner(
             title=title or prompt[:50],
             subtitle=subtitle or "Подробности в посте",
