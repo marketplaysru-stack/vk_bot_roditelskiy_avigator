@@ -17,7 +17,6 @@ class MultiImageGenerator(ImageGenerator):
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
         category = self._detect_category(prompt)
 
-        # Анонсы – баннер (быстро)
         if is_announce:
             logger.info("Генерация баннера для анонса")
             return self.banner.create_banner(
@@ -28,13 +27,11 @@ class MultiImageGenerator(ImageGenerator):
                 is_announce=True
             )
 
-        # Посты – сначала Pexels
         try:
             logger.info(f"Pexels: {prompt[:50]}...")
             result = self.pexels.generate(prompt)
             if result:
                 logger.info(f"✅ Pexels успешно, {len(result)} байт")
-                # Накладываем текст
                 return self.banner.create_banner_from_image(
                     result,
                     title=title or prompt[:50],
@@ -44,7 +41,6 @@ class MultiImageGenerator(ImageGenerator):
         except Exception as e:
             logger.error(f"Pexels ошибка: {e}")
 
-        # Если Pexels не сработал – Pollinations
         detailed_prompt = self._build_detailed_prompt(prompt, category)
         try:
             logger.info(f"Pollinations: {detailed_prompt[:150]}...")
@@ -60,7 +56,6 @@ class MultiImageGenerator(ImageGenerator):
         except Exception as e:
             logger.error(f"Pollinations ошибка: {e}")
 
-        # Если ничего не сработало – баннер
         logger.warning("Все генераторы не сработали, создаём баннер")
         return self.banner.create_banner(
             title=title or prompt[:50],
