@@ -1,4 +1,4 @@
-"""generators/image/multi.py – GenAPI (основной), Pollinations, Picsum, баннер"""
+"""generators/image/multi.py – GenAPI, Pollinations, Picsum с текстом для всех"""
 import logging
 from typing import Optional
 from .base import ImageGenerator
@@ -18,11 +18,74 @@ class MultiImageGenerator(ImageGenerator):
 
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
         category = self._detect_category(prompt)
+        detailed_prompt = self._build_detailed_prompt(prompt, category)
 
-        # Анонсы – баннер (можно оставить баннер для анонсов, но можно и попробовать GenAPI)
-        # Оставим баннер для скорости, но если хотите, можно раскомментировать и использовать GenAPI
+        # Пытаемся получить изображение от генераторов
+        image_bytes = None
+        error_messages = []
+
+        # 1) GenAPI
+        try:
+            logger.info(f"GenAPI: {detailed_prompt[:150]}...")
+            result = self.genapi.generate(detailed_prompt)
+            if result:
+                logger.info(f"✅ GenAPI успешно, {len(result)} байт")
+                image_bytes = result
+        except Exception as e:
+            logger.error(f"GenAPI ошибка: {e}")
+            error_messages.append(f"GenAPI: {e}")
+
+        # 2) Pollinations
+        if not image_bytes:
+            try:
+                logger.info(f"Pollinations: {detailed_prompt[:150]}...")
+                result = self.pollinations.generate(detailed_prompt)
+                if result:
+                    logger.info(f"✅ Pollinations успешно, {len(result)} байт")
+                    image_bytes = result
+            except Exception as e:
+                logger.error(f"Pollinations ошибка: {e}")
+                error_messages.append(f"Pollinations: {e}")
+
+        # 3) Picsum (без текста, просто фото)
+        if not image_bytes:
+            try:
+                logger.info("Picsum: получение случайного фото")
+                result = self.picsum.generate(prompt)
+                if result:
+                    logger.info(f"✅ Picsum успешно, {len(result)} байт")
+                    image_bytes = result
+            except Exception as e:
+                logger.error(f"Picsum ошибка: {e}")
+                error_messages.append(f"Picsum: {e}")
+
+        # Если есть изображение – накладываем текст (для анонсов или постов)
+        if image_bytes:
+            try:
+                if is_announce:
+                    final = self.banner.create_banner_from_image(
+                        image_bytes,
+                        title=title or "🔥 НОВОСТЬ",
+                        subtitle=subtitle or prompt[:60],
+                        cta=cta or "ПОДПИСЫВАЙСЯ"
+                    )
+                else:
+                    final = self.banner.create_banner_from_image(
+                        image_bytes,
+                        title=title or prompt[:50],
+                        subtitle=subtitle or "Подробности в посте",
+                        cta=cta or "ЧИТАТЬ"
+                    )
+                logger.info(f"Баннер с текстом создан, размер {len(final)} байт")
+                return final
+            except Exception as e:
+                logger.error(f"Ошибка наложения текста: {e}")
+                # Возвращаем изображение без текста, чтобы не потерять картинку
+                return image_bytes
+
+        # Если ничего не сработало – баннер-заглушка (последний резерв)
+        logger.warning(f"Все генераторы не сработали: {error_messages}")
         if is_announce:
-            logger.info("Генерация баннера для анонса")
             return self.banner.create_banner(
                 title=title or "🔥 НОВОСТЬ",
                 subtitle=subtitle or prompt[:60],
@@ -30,50 +93,13 @@ class MultiImageGenerator(ImageGenerator):
                 category=category,
                 is_announce=True
             )
-
-        # Для постов – сначала GenAPI
-        detailed_prompt = self._build_detailed_prompt(prompt, category)
-        try:
-            logger.info(f"GenAPI: {detailed_prompt[:150]}...")
-            result = self.genapi.generate(detailed_prompt)
-            if result:
-                logger.info(f"✅ GenAPI успешно, {len(result)} байт")
-                return result
-        except Exception as e:
-            logger.error(f"GenAPI ошибка: {e}")
-
-        # Если GenAPI не сработал – Pollinations
-        try:
-            logger.info(f"Pollinations: {detailed_prompt[:150]}...")
-            result = self.pollinations.generate(detailed_prompt)
-            if result:
-                logger.info(f"✅ Pollinations успешно, {len(result)} байт")
-                return result
-        except Exception as e:
-            logger.error(f"Pollinations ошибка: {e}")
-
-        # Если Pollinations не сработал – Picsum с текстом
-        logger.warning("GenAPI и Pollinations не сработали, используем Picsum с текстом")
-        try:
-            bg_bytes = self.picsum.generate(prompt)
-            if bg_bytes:
-                return self.banner.create_banner_from_image(
-                    bg_bytes,
-                    title=title or prompt[:50],
-                    subtitle=subtitle or "Подробности в посте",
-                    cta=cta or "ЧИТАТЬ"
-                )
-        except Exception as e:
-            logger.error(f"Picsum ошибка: {e}")
-
-        # Последний резерв – баннер
-        logger.warning("Все генераторы не сработали, баннер-заглушка")
-        return self.banner.create_banner(
-            title=prompt[:50],
-            subtitle="Подробности в посте",
-            cta="ЧИТАТЬ",
-            category=category
-        )
+        else:
+            return self.banner.create_banner(
+                title=prompt[:50],
+                subtitle="Подробности в посте",
+                cta="ЧИТАТЬ",
+                category=category
+            )
 
     def _detect_category(self, prompt: str) -> str:
         topic = prompt.lower()
