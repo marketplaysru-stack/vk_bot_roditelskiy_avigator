@@ -28,8 +28,8 @@ class BannerGenerator:
         return buf.getvalue()
 
     def create_banner_from_image(self, image_bytes: bytes, title: str = "", subtitle: str = "", cta: str = "") -> bytes:
-        """Накладывает текст на изображение с корректной обработкой прозрачности."""
-        # 1) Открываем изображение и конвертируем в RGBA
+        """Накладывает текст на изображение с использованием paste (без alpha_composite)."""
+        # 1) Открываем и конвертируем в RGBA
         img = Image.open(io.BytesIO(image_bytes)).convert('RGBA')
         width, height = img.size
 
@@ -40,8 +40,8 @@ class BannerGenerator:
             alpha = int(200 * (1 - (y - height//2) / (height//2)))
             overlay_draw.rectangle((0, y, width, y+1), fill=(0, 0, 0, alpha))
 
-        # 3) Накладываем оверлей на изображение
-        img = Image.alpha_composite(img, overlay)
+        # 3) Накладываем оверлей с помощью paste (маска = overlay)
+        img.paste(overlay, (0, 0), overlay)
 
         # 4) Добавляем текст
         draw = ImageDraw.Draw(img)
@@ -74,13 +74,11 @@ class BannerGenerator:
             bbox = draw.textbbox((0, 0), cta, font=font_cta)
             tw = bbox[2] - bbox[0]
             x = (width - tw) // 2
-            # Рисуем жёлтую кнопку
             draw.rectangle((x-30, y_offset-20, x+tw+30, y_offset+60), fill=(255, 215, 0, 255), outline=None)
             draw.text((x, y_offset), cta, fill=(0, 0, 0, 255), font=font_cta)
 
-        # 5) Сохраняем как RGB (убираем альфа-канал для совместимости)
-        rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-        rgb_img.paste(img, mask=img.split()[3])  # используем альфа-канал как маску
+        # 5) Конвертируем в RGB и сохраняем
+        rgb_img = img.convert('RGB')
         buf = io.BytesIO()
         rgb_img.save(buf, format='PNG')
         return buf.getvalue()
