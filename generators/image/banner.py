@@ -28,15 +28,23 @@ class BannerGenerator:
         return buf.getvalue()
 
     def create_banner_from_image(self, image_bytes: bytes, title: str = "", subtitle: str = "", cta: str = "") -> bytes:
-        """Накладывает текст на изображение (с принудительной конвертацией в RGB)"""
-        # Открываем и конвертируем в RGB
-        img = Image.open(io.BytesIO(image_bytes))
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-
-        draw = ImageDraw.Draw(img)
+        """Накладывает текст на изображение с корректной обработкой прозрачности."""
+        # 1) Открываем изображение и конвертируем в RGBA
+        img = Image.open(io.BytesIO(image_bytes)).convert('RGBA')
         width, height = img.size
 
+        # 2) Создаём оверлей с градиентом (чёрный с прозрачностью снизу)
+        overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        for y in range(height//2, height):
+            alpha = int(200 * (1 - (y - height//2) / (height//2)))
+            overlay_draw.rectangle((0, y, width, y+1), fill=(0, 0, 0, alpha))
+
+        # 3) Накладываем оверлей на изображение
+        img = Image.alpha_composite(img, overlay)
+
+        # 4) Добавляем текст
+        draw = ImageDraw.Draw(img)
         try:
             font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(height/14))
             font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", int(height/20))
@@ -46,43 +54,38 @@ class BannerGenerator:
             font_sub = ImageFont.load_default()
             font_cta = ImageFont.load_default()
 
-        # Полупрозрачный оверлей снизу
-        overlay = Image.new('RGBA', (width, height), (0,0,0,0))
-        overlay_draw = ImageDraw.Draw(overlay)
-        for y in range(height//2, height):
-            alpha = int(200 * (1 - (y - height//2) / (height//2)))
-            overlay_draw.rectangle((0, y, width, y+1), fill=(0,0,0,alpha))
-        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
-        draw = ImageDraw.Draw(img)
-
         y_offset = height - 120
 
         if title:
             bbox = draw.textbbox((0, 0), title, font=font_title)
             tw = bbox[2] - bbox[0]
             x = (width - tw) // 2
-            draw.text((x, y_offset), title, fill='white', font=font_title)
+            draw.text((x, y_offset), title, fill=(255, 255, 255, 255), font=font_title)
             y_offset -= int(height/12)
 
         if subtitle:
             bbox = draw.textbbox((0, 0), subtitle, font=font_sub)
             tw = bbox[2] - bbox[0]
             x = (width - tw) // 2
-            draw.text((x, y_offset), subtitle, fill='#FFD700', font=font_sub)
+            draw.text((x, y_offset), subtitle, fill=(255, 215, 0, 255), font=font_sub)
             y_offset -= int(height/15)
 
         if cta:
             bbox = draw.textbbox((0, 0), cta, font=font_cta)
             tw = bbox[2] - bbox[0]
             x = (width - tw) // 2
-            draw.rectangle((x-30, y_offset-20, x+tw+30, y_offset+60), fill='#FFD700', outline=None)
-            draw.text((x, y_offset), cta, fill='#0a0a2e', font=font_cta)
+            # Рисуем жёлтую кнопку
+            draw.rectangle((x-30, y_offset-20, x+tw+30, y_offset+60), fill=(255, 215, 0, 255), outline=None)
+            draw.text((x, y_offset), cta, fill=(0, 0, 0, 255), font=font_cta)
 
+        # 5) Сохраняем как RGB (убираем альфа-канал для совместимости)
+        rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+        rgb_img.paste(img, mask=img.split()[3])  # используем альфа-канал как маску
         buf = io.BytesIO()
-        img.save(buf, format='PNG')
+        rgb_img.save(buf, format='PNG')
         return buf.getvalue()
 
-    # ---- Вспомогательные методы ----
+    # ---- Вспомогательные методы (без изменений) ----
     def _get_theme(self, category: str):
         themes = {
             "construction": {
