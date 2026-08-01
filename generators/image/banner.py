@@ -1,4 +1,4 @@
-"""generators/image/banner.py – создание баннеров с улучшенным дизайном"""
+"""generators/image/banner.py – создание баннеров и наложение текста"""
 import io
 import random
 from PIL import Image, ImageDraw, ImageFont
@@ -10,25 +10,17 @@ class BannerGenerator:
 
     def create_banner(self, title: str = "", subtitle: str = "", cta: str = "", category: str = "general", is_announce: bool = False) -> bytes:
         theme = self._get_theme(category)
-
-        # Для анонсов – более яркая цветовая схема
         if is_announce:
             theme = self._get_announce_theme(category)
 
         img = Image.new('RGB', (self.width, self.height), color='#0a0a2e')
         draw = ImageDraw.Draw(img)
 
-        # Фон
         self._draw_gradient(draw, theme)
-        # Декоративные элементы (круги, линии)
         self._draw_decorations(draw, theme, is_announce)
-        # Иконки (больше для анонсов)
         self._draw_icons(draw, theme, is_announce)
-        # Полупрозрачный оверлей для текста
         self._draw_overlay(draw)
-        # Текст
         self._draw_text(draw, title, subtitle, cta, theme, is_announce)
-        # Рамка
         self._draw_frame(draw, theme)
 
         buf = io.BytesIO()
@@ -36,19 +28,15 @@ class BannerGenerator:
         return buf.getvalue()
 
     def create_banner_from_image(self, image_bytes: bytes, title: str = "", subtitle: str = "", cta: str = "") -> bytes:
-        # (оставляем как было, для постов)
+        """Накладывает текст на изображение (с принудительной конвертацией в RGB)"""
+        # Открываем и конвертируем в RGB
         img = Image.open(io.BytesIO(image_bytes))
-        if img.mode in ('RGBA', 'LA', 'P'):
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'P':
-                img = img.convert('RGBA')
-            background.paste(img, mask=img.split()[3] if img.mode == 'RGBA' else None)
-            img = background
-        elif img.mode != 'RGB':
+        if img.mode != 'RGB':
             img = img.convert('RGB')
 
         draw = ImageDraw.Draw(img)
         width, height = img.size
+
         try:
             font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(height/14))
             font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", int(height/20))
@@ -58,6 +46,7 @@ class BannerGenerator:
             font_sub = ImageFont.load_default()
             font_cta = ImageFont.load_default()
 
+        # Полупрозрачный оверлей снизу
         overlay = Image.new('RGBA', (width, height), (0,0,0,0))
         overlay_draw = ImageDraw.Draw(overlay)
         for y in range(height//2, height):
@@ -67,6 +56,7 @@ class BannerGenerator:
         draw = ImageDraw.Draw(img)
 
         y_offset = height - 120
+
         if title:
             bbox = draw.textbbox((0, 0), title, font=font_title)
             tw = bbox[2] - bbox[0]
@@ -92,7 +82,7 @@ class BannerGenerator:
         img.save(buf, format='PNG')
         return buf.getvalue()
 
-    # ---- Тематические схемы ----
+    # ---- Вспомогательные методы ----
     def _get_theme(self, category: str):
         themes = {
             "construction": {
@@ -119,7 +109,6 @@ class BannerGenerator:
         return themes.get(category, themes["general"])
 
     def _get_announce_theme(self, category: str):
-        # Более яркие цвета для анонсов
         themes = {
             "construction": {
                 "colors": ['#FF4500', '#00BFFF', '#FFD700', '#FFFFFF'],
@@ -144,7 +133,6 @@ class BannerGenerator:
         }
         return themes.get(category, themes["general"])
 
-    # ---- Вспомогательные методы рисования ----
     def _draw_gradient(self, draw, theme):
         c1 = self._hex_to_rgb(theme['gradient'][0])
         c2 = self._hex_to_rgb(theme['gradient'][1])
@@ -169,12 +157,9 @@ class BannerGenerator:
             y = random.randint(0, self.height)
             r = random.randint(40, 200)
             color = random.choice(colors)
-            # Рисуем контур и заливку для яркости
             draw.ellipse((x-r, y-r, x+r, y+r), outline=color, width=6, fill=None)
             r2 = r // 3
             draw.ellipse((x-r2, y-r2, x+r2, y+r2), fill=color, outline=None)
-
-        # Случайные линии
         for _ in range(5):
             x1 = random.randint(0, self.width)
             y1 = random.randint(0, self.height)
