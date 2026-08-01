@@ -14,7 +14,7 @@ from config import config
 print(config.telegram_token)
 print(config.groups)
 print(config.rss_sources)
-print(config.rss_default_group)
+print(config.cloudflare_worker_url)
 """
 
 from __future__ import annotations
@@ -114,6 +114,11 @@ class Config:
     # ========== ЛИЧНАЯ СТРАНИЦА ==========
     vk_user_id: int = 0
     vk_token_user: str = ""
+
+    # ========== КЛЮЧИ ГЕНЕРАЦИИ ==========
+    genapi_api_key: str = ""
+    cloudflare_worker_url: str = ""
+    cloudflare_api_key: str = ""
 
 
 # --------------------------------------------------
@@ -250,6 +255,11 @@ def load_config() -> Config:
         # ========== ЛИЧНАЯ СТРАНИЦА ==========
         vk_user_id=int(os.getenv("VK_USER_ID", "0")),
         vk_token_user=os.getenv("VK_TOKEN_USER", ""),
+
+        # ========== КЛЮЧИ ГЕНЕРАЦИИ ==========
+        genapi_api_key=os.getenv("GENAPI_API_KEY", ""),
+        cloudflare_worker_url=os.getenv("CLOUDFLARE_WORKER_URL", ""),
+        cloudflare_api_key=os.getenv("CLOUDFLARE_API_KEY", ""),
 
     )
 
