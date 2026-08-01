@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 from PIL import Image
 import io
-import requests  # <-- ВАЖНО: добавлен импорт requests
+import requests
 
 from core.logger import get_logger
 from models.group import Group
@@ -22,16 +22,13 @@ class VKPublisher:
         self.token = token
 
     def _prepare_image(self, image_bytes: bytes) -> Optional[bytes]:
-        """Проверяет и конвертирует изображение в JPEG."""
         try:
             img = Image.open(io.BytesIO(image_bytes))
             if img.mode in ('RGBA', 'LA', 'P'):
                 img = img.convert('RGB')
             buf = io.BytesIO()
             img.save(buf, format='JPEG', quality=90)
-            result = buf.getvalue()
-            logger.info(f"Изображение подготовлено, размер: {len(result)} байт")
-            return result
+            return buf.getvalue()
         except Exception as e:
             logger.error(f"Ошибка подготовки изображения: {e}")
             return None
@@ -56,7 +53,11 @@ class VKPublisher:
                 logger.info(f"Временный файл сохранён: {temp_path}")
 
                 try:
-                    photo = upload.photo_wall(str(temp_path), group_id=abs(group.vk_owner_id))
+                    # !!! Исправление: для публичных страниц не передаём group_id
+                    if group.group_id < 0:
+                        photo = upload.photo_wall(str(temp_path), group_id=abs(group.vk_owner_id))
+                    else:
+                        photo = upload.photo_wall(str(temp_path))  # без group_id
                     if photo and isinstance(photo, list) and len(photo) > 0:
                         attachments.append(f"photo{photo[0]['owner_id']}_{photo[0]['id']}")
                         logger.info("Фото успешно загружено в группу")
@@ -88,7 +89,6 @@ class VKPublisher:
             return PublishResult(ok=False, message=str(e))
 
     def publish_to_user(self, text: str, image_bytes: Optional[bytes] = None, link: Optional[str] = None) -> PublishResult:
-        """Публикует анонс на личную стену пользователя."""
         try:
             vk = vk_api.VkApi(token=self.token)
             api = vk.get_api()
