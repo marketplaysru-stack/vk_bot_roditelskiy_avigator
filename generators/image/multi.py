@@ -1,4 +1,4 @@
-"""generators/image/multi.py – Pollinations (основной), Picsum, баннер (без HF/внешних API)"""
+"""generators/image/multi.py – баннер (основной), Pollinations, Picsum"""
 import logging
 from typing import Optional
 from .base import ImageGenerator
@@ -17,6 +17,7 @@ class MultiImageGenerator(ImageGenerator):
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
         category = self._detect_category(prompt)
 
+        # Для анонсов сразу баннер (быстро и стабильно)
         if is_announce:
             logger.info("Генерация баннера для анонса")
             return self.banner.create_banner(
@@ -27,39 +28,40 @@ class MultiImageGenerator(ImageGenerator):
                 is_announce=True
             )
 
-        # Формируем улучшенный промпт на английском с деталями
+        # Для постов – сначала пытаемся получить картинку через Pollinations
         detailed_prompt = self._build_detailed_prompt(prompt, category)
+        image_bytes = None
 
-        # 1) Pollinations – основной генератор
+        # 1) Pollinations
         try:
             logger.info(f"Pollinations: {detailed_prompt[:150]}...")
             result = self.pollinations.generate(detailed_prompt)
             if result:
                 logger.info(f"✅ Pollinations успешно, {len(result)} байт")
-                return result
+                image_bytes = result
         except Exception as e:
             logger.error(f"Pollinations ошибка: {e}")
 
-        # 2) Picsum + текст (если Pollinations упал)
-        logger.warning("Pollinations не сработал, используем Picsum с текстом")
-        try:
-            bg_bytes = self.picsum.generate(prompt)
-            if bg_bytes:
+        # 2) Если Pollinations дал результат – накладываем текст (как в анонсах) или оставляем как есть
+        if image_bytes:
+            try:
                 return self.banner.create_banner_from_image(
-                    bg_bytes,
+                    image_bytes,
                     title=title or prompt[:50],
                     subtitle=subtitle or "Подробности в посте",
                     cta=cta or "ЧИТАТЬ"
                 )
-        except Exception as e:
-            logger.error(f"Picsum ошибка: {e}")
+            except Exception as e:
+                logger.error(f"Ошибка наложения текста: {e}")
+                # Если не получилось наложить текст, возвращаем картинку без текста
+                return image_bytes
 
-        # 3) Последний резерв – баннер
-        logger.warning("Все генераторы не сработали, баннер-заглушка")
+        # 3) Если Pollinations не сработал – баннер с нуля
+        logger.warning("Pollinations не сработал, создаём баннер")
         return self.banner.create_banner(
-            title=prompt[:50],
-            subtitle="Подробности в посте",
-            cta="ЧИТАТЬ",
+            title=title or prompt[:50],
+            subtitle=subtitle or "Подробности в посте",
+            cta=cta or "ЧИТАТЬ",
             category=category
         )
 
@@ -83,14 +85,13 @@ class MultiImageGenerator(ImageGenerator):
             if "—" in topic:
                 topic = topic.split("—")[0].strip()
         if len(topic) < 5:
-            topic = "technology and innovation"
+            topic = "Technology and innovation"
 
-        # Улучшенные промпты с акцентом на реализм и детали
         templates = {
-            "construction": f"Professional architectural visualization of {topic}. Construction site with cranes, blueprints, hard hats, modern buildings, BIM model. Photorealistic, 8K, cinematic lighting, vivid colors: blue, orange, white. Vertical composition 9:16, no text, no people.",
-            "business": f"Corporate illustration of {topic}. Growth charts, financial graphs, gears, handshake, dollar signs. Clean, modern, flat vector with gradients. High detail, 4K, navy, gold, white, teal. Vertical 9:16, no text, no people.",
-            "ai": f"Futuristic digital art of {topic}. Neural networks, AI chips, glowing data streams, abstract circuits. Cyberpunk, neon, high-tech. Ultra realistic, 8K, purple, blue, cyan, gold. Vertical 9:16, no text, no people.",
-            "general": f"Creative vector illustration of {topic}. Abstract icons, geometric shapes, modern tech elements. High resolution, vibrant colors, blue, purple, orange, white. Vertical 9:16, no text, no people."
+            "construction": f"Professional illustration about {topic}. Construction site, cranes, blueprints, hard hats, buildings, BIM model. High detail, 4K, flat design, vibrant colors: blue, orange, white. Vertical 9:16, no text, no people.",
+            "business": f"Corporate illustration about {topic}. Growth charts, graphs, gears, handshake, dollar signs. Professional, clean, modern, high resolution, navy, gold, white, teal. Vertical 9:16, no text, no people.",
+            "ai": f"Futuristic illustration about {topic}. Neural networks, AI chips, data streams, glowing circuits. Cyberpunk, neon, high-tech, 8K, purple, blue, cyan, gold. Vertical 9:16, no text, no people.",
+            "general": f"Creative illustration about {topic}. Abstract icons, geometric shapes. Modern, clean, flat design, high quality, blue, purple, orange, white. Vertical 9:16, no text, no people."
         }
         return templates.get(category, templates["general"])
 
