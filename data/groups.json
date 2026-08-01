@@ -1,20 +1,20 @@
 {
   "AI Навигатор": {
-    "token": "vk1.a...",
+    "token": "vk1.a.B9HmSyRCkQr9XDFDZ8aeSIM22zRqxMDESod5LZeknFRqCDK_VLmwLzpFOGgzr0o8NoSXC0834egm42FLPPh-aEO3qpetsa6G0vOPxETgoIjaldBq1K2G6WJKtmFsVfEDUA2mdUoVNXthS2y4z6x76xxP1fABrYTLh7uzj7S6EX6_JjbfeNxac2Yk75YmtNmRmJ2CxpDDWOOafE4Ckh-LmA",
     "group_id": -240273450,
     "enabled": true,
     "style": "default",
     "category": "tech"
   },
   "Строительный навигатор": {
-    "token": "vk1.a...",
+    "token": "vk1.a.B9HmSyRCkQr9XDFDZ8aeSIM22zRqxMDESod5LZeknFRqCDK_VLmwLzpFOGgzr0o8NoSXC0834egm42FLPPh-aEO3qpetsa6G0vOPxETgoIjaldBq1K2G6WJKtmFsVfEDUA2mdUoVNXthS2y4z6x76xxP1fABrYTLh7uzj7S6EX6_JjbfeNxac2Yk75YmtNmRmJ2CxpDDWOOafE4Ckh-LmA",
     "group_id": -239598146,
     "enabled": true,
     "style": "tech",
     "category": "construction"
   },
   "Родительский": {
-    "token": "vk1.a...",
+    "token": "vk1.a.B9HmSyRCkQr9XDFDZ8aeSIM22zRqxMDESod5LZeknFRqCDK_VLmwLzpFOGgzr0o8NoSXC0834egm42FLPPh-aEO3qpetsa6G0vOPxETgoIjaldBq1K2G6WJKtmFsVfEDUA2mdUoVNXthS2y4z6x76xxP1fABrYTLh7uzj7S6EX6_JjbfeNxac2Yk75YmtNmRmJ2CxpDDWOOafE4Ckh-LmA",
     "group_id": 197687739,
     "enabled": true,
     "style": "friendly",
