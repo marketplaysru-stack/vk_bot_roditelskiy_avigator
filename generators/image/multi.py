@@ -1,9 +1,10 @@
-"""generators/image/multi.py – GenAPI (основной), Pollinations, Picsum, баннер"""
+"""generators/image/multi.py – Hugging Face (основной), Pollinations, Pixazo, Picsum"""
 import logging
 from typing import Optional
 from .base import ImageGenerator
-from .genapi import GenAPIGenerator
+from .huggingface_inference import HuggingFaceInferenceGenerator
 from .pollinations import PollinationsGenerator
+from .pixazo import PixazoGenerator
 from .picsum import PicsumGenerator
 from .banner import BannerGenerator
 
@@ -11,15 +12,16 @@ logger = logging.getLogger(__name__)
 
 class MultiImageGenerator(ImageGenerator):
     def __init__(self):
-        self.genapi = GenAPIGenerator(timeout=180)
+        self.hf = HuggingFaceInferenceGenerator(timeout=180)
         self.pollinations = PollinationsGenerator(timeout=90)
+        self.pixazo = PixazoGenerator(timeout=90)
         self.picsum = PicsumGenerator()
         self.banner = BannerGenerator()
 
     def generate(self, prompt: str, is_announce: bool = False, title: str = "", subtitle: str = "", cta: str = "") -> Optional[bytes]:
         category = self._detect_category(prompt)
 
-        # Анонсы – баннер (быстро и стабильно)
+        # Анонсы – баннер (можно оставить или тоже генерировать через HF)
         if is_announce:
             logger.info("Генерация баннера для анонса")
             return self.banner.create_banner(
@@ -30,18 +32,19 @@ class MultiImageGenerator(ImageGenerator):
                 is_announce=True
             )
 
-        # Для постов – GenAPI
         detailed_prompt = self._build_detailed_prompt(prompt, category)
+
+        # 1) Hugging Face
         try:
-            logger.info(f"GenAPI: {detailed_prompt[:150]}...")
-            result = self.genapi.generate(detailed_prompt)
+            logger.info(f"Hugging Face: {detailed_prompt[:150]}...")
+            result = self.hf.generate(detailed_prompt)
             if result:
-                logger.info(f"✅ GenAPI успешно, {len(result)} байт")
+                logger.info(f"✅ Hugging Face успешно, {len(result)} байт")
                 return result
         except Exception as e:
-            logger.error(f"GenAPI ошибка: {e}")
+            logger.error(f"Hugging Face ошибка: {e}")
 
-        # Резерв – Pollinations
+        # 2) Pollinations
         try:
             logger.info(f"Pollinations: {detailed_prompt[:150]}...")
             result = self.pollinations.generate(detailed_prompt)
@@ -51,8 +54,18 @@ class MultiImageGenerator(ImageGenerator):
         except Exception as e:
             logger.error(f"Pollinations ошибка: {e}")
 
-        # Второй резерв – Picsum с текстом
-        logger.warning("GenAPI и Pollinations не сработали, используем Picsum с текстом")
+        # 3) Pixazo
+        try:
+            logger.info(f"Pixazo: {detailed_prompt[:150]}...")
+            result = self.pixazo.generate(detailed_prompt)
+            if result:
+                logger.info(f"✅ Pixazo успешно, {len(result)} байт")
+                return result
+        except Exception as e:
+            logger.error(f"Pixazo ошибка: {e}")
+
+        # 4) Picsum + текст
+        logger.warning("Все генераторы не сработали, используем Picsum с текстом")
         try:
             bg_bytes = self.picsum.generate(prompt)
             if bg_bytes:
@@ -65,23 +78,14 @@ class MultiImageGenerator(ImageGenerator):
         except Exception as e:
             logger.error(f"Picsum ошибка: {e}")
 
-        # Последний резерв – баннер
+        # 5) Последний резерв – баннер
         logger.warning("Все генераторы не сработали, баннер-заглушка")
-        if is_announce:
-            return self.banner.create_banner(
-                title=title or "🔥 НОВОСТЬ",
-                subtitle=subtitle or prompt[:60],
-                cta=cta or "ПОДПИСЫВАЙСЯ",
-                category=category,
-                is_announce=True
-            )
-        else:
-            return self.banner.create_banner(
-                title=prompt[:50],
-                subtitle="Подробности в посте",
-                cta="ЧИТАТЬ",
-                category=category
-            )
+        return self.banner.create_banner(
+            title=prompt[:50],
+            subtitle="Подробности в посте",
+            cta="ЧИТАТЬ",
+            category=category
+        )
 
     def _detect_category(self, prompt: str) -> str:
         topic = prompt.lower()
