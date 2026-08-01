@@ -1,4 +1,4 @@
-"""generators/image/genapi.py – генерация через GenAPI с полными параметрами"""
+"""generators/image/genapi.py – генерация через GenAPI (модель wan-2-7-image)"""
 import os
 import requests
 import logging
@@ -14,7 +14,9 @@ class GenAPIGenerator(ImageGenerator):
         self.timeout = timeout
         if not self.api_key:
             raise ValueError("GENAPI_API_KEY не задан")
-        self.base_url = "https://api.gen-api.ru/api/v1/networks/gpt-image-2"
+
+        # Эндпоинт для модели wan-2-7-image
+        self.base_url = "https://api.gen-api.ru/api/v1/networks/wan-2-7-image"
         self.status_url = "https://api.gen-api.ru/api/v1/requests"
 
     def generate(self, prompt: str, negative_prompt: str = "", **kwargs) -> bytes:
@@ -24,21 +26,21 @@ class GenAPIGenerator(ImageGenerator):
             "Authorization": f"Bearer {self.api_key}"
         }
 
-        # Формируем payload с параметрами из примера
+        # Формируем payload по документации GenAPI
         payload = {
             "prompt": prompt,
-            "model": kwargs.get("model", "medium"),
-            "aspect_ratio": kwargs.get("aspect_ratio", "1:1"),
-            "creativity": kwargs.get("creativity", "medium"),
-            "image_style_references": kwargs.get("image_style_references", []),
-            "styles": kwargs.get("styles", []),
-            "moodboards": kwargs.get("moodboards", [
-                {
-                    "id": "1e51738c-7413-469e-93b6-ad50db460a1f",
-                    "strength": 1
-                }
-            ])
+            "callback_url": kwargs.get("callback_url"),
         }
+
+        # Добавляем дополнительные параметры, если они переданы
+        if kwargs.get("aspect_ratio"):
+            payload["aspect_ratio"] = kwargs["aspect_ratio"]
+        if kwargs.get("creativity"):
+            payload["creativity"] = kwargs["creativity"]
+        if kwargs.get("styles"):
+            payload["styles"] = kwargs["styles"]
+        if kwargs.get("moodboards"):
+            payload["moodboards"] = kwargs["moodboards"]
         if negative_prompt:
             payload["negative_prompt"] = negative_prompt
 
@@ -72,8 +74,8 @@ class GenAPIGenerator(ImageGenerator):
 
         logger.info(f"Задача создана, request_id: {request_id}")
 
-        # 2) Ожидаем завершения
-        for attempt in range(30):
+        # 2) Ожидаем завершения (проверяем статус по request_id)
+        for attempt in range(30):  # до 60 секунд (по 2 сек)
             time.sleep(2)
             try:
                 status_resp = requests.get(
@@ -82,13 +84,12 @@ class GenAPIGenerator(ImageGenerator):
                     timeout=self.timeout
                 )
                 if status_resp.status_code == 404:
-                    logger.warning(f"Задача {request_id} не найдена (404)")
-                    # Попробуем получить результат другим способом
-                    # Возможно, задача уже завершена и результат в другом месте
+                    logger.warning(f"Задача {request_id} не найдена (404), возможно, уже завершена")
                     continue
                 status_resp.raise_for_status()
                 status_data = status_resp.json()
                 logger.info(f"Попытка {attempt+1}: статус = {status_data.get('status')}")
+
                 if status_data.get("status") == "success":
                     output = status_data.get("output")
                     if output:
