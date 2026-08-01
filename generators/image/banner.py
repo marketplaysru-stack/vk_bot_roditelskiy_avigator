@@ -9,32 +9,37 @@ class BannerGenerator:
         self.height = 1024
 
     def create_banner(self, title: str = "", subtitle: str = "", cta: str = "", category: str = "general") -> bytes:
-        """Создаёт баннер с нуля (градиент, иконки, текст)."""
-        # Выбираем тему
         theme = self._get_theme(category)
 
         img = Image.new('RGB', (self.width, self.height), color='#0a0a2e')
         draw = ImageDraw.Draw(img)
 
-        # Градиент
         self._draw_gradient(draw, theme)
-        # Оверлей для текста
         self._draw_overlay(draw)
-        # Иконки
         self._draw_icons(draw, theme)
-        # Текст
         self._draw_text(draw, title, subtitle, cta, theme)
-        # Рамка
         self._draw_frame(draw, theme)
 
         buf = io.BytesIO()
         img.save(buf, format='PNG')
         return buf.getvalue()
 
-    # ---- Наложение текста на готовое изображение (для анонсов и постов) ----
     def create_banner_from_image(self, image_bytes: bytes, title: str = "", subtitle: str = "", cta: str = "") -> bytes:
-        """Принимает байты изображения и накладывает текст."""
-        img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        """Накладывает текст на изображение (с принудительной конвертацией в RGB)"""
+        # Открываем изображение
+        img = Image.open(io.BytesIO(image_bytes))
+        
+        # Конвертируем в RGB (убираем альфа-канал)
+        if img.mode in ('RGBA', 'LA', 'P'):
+            # Создаём белый фон, чтобы удалить прозрачность
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[3] if img.mode == 'RGBA' else None)
+            img = background
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
+
         draw = ImageDraw.Draw(img)
         width, height = img.size
 
